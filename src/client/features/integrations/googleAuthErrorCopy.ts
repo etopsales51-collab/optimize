@@ -31,7 +31,7 @@ export function googleAuthErrorCopy(
       return {
         title: "Google account already connected",
         description:
-          "That Google account is already linked to a different OpenSEO account. Disconnect it there first, or contact support and we'll move it over.",
+          "That Google account is already linked to a different Deep Insights account. Disconnect it there first, or contact support and we'll move it over.",
       };
     default:
       return {

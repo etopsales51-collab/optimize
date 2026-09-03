@@ -46,8 +46,8 @@ export function SearchConsoleOnboardingStep() {
         {project ? <GscConnect projectId={project.id} /> : <Checking />}
 
         <p className="hidden sm:block text-xs leading-relaxed text-base-content/55">
-          For now, Search Console data flows through the OpenSEO MCP. We're
-          building it into the OpenSEO app soon too.
+          For now, Search Console data flows through the Deep Insights MCP. We're
+          building it into the Deep Insights app soon too.
         </p>
       </div>
 

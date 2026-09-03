@@ -40,7 +40,7 @@ const HERO_COPY: Record<
   },
   mcp: {
     title: "Connect your AI agent",
-    body: "OpenSEO is built to be used from agents like Claude. Connect once, then ask it to use OpenSEO to help build your SEO strategy.",
+    body: "Deep Insights is built to be used from agents like Claude. Connect once, then ask it to use Deep Insights to help build your SEO strategy.",
     cta: "Show me how",
   },
   gsc: {

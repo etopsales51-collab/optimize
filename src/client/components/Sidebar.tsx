@@ -5,7 +5,6 @@ import { useEffect, useState, type ComponentType } from "react";
 import {
   ArrowLeftRight,
   Check,
-  CircleHelp,
   CreditCard,
   LayoutGrid,
   LogOut,
@@ -131,7 +130,7 @@ export function Sidebar({ projectId, onNavigate, onClose }: SidebarProps) {
           onClick={onNavigate}
           className="text-base font-semibold text-base-content"
         >
-          OpenSEO
+          Deep Insights
         </Link>
         {onClose ? (
           <button
@@ -262,13 +261,6 @@ function SidebarFooter({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <div className="shrink-0 border-t border-base-300 px-2 py-2 pb-safe">
-      <SidebarNavLink
-        icon={CircleHelp}
-        label="Help & Community"
-        onNavigate={onNavigate}
-        linkProps={{ to: "/support" }}
-      />
-
       {email ? (
         <div className="dropdown dropdown-top w-full">
           <button

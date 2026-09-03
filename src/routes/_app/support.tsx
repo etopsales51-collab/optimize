@@ -32,7 +32,7 @@ function SupportPage() {
         </h1>
         <p className="mt-2 text-sm text-base-content/60">
           We want to talk to you! We're super open to feedback and want to learn
-          how you work so we can make OpenSEO better.
+          how you work so we can make Deep Insights better.
         </p>
 
         <div className="mt-8 space-y-3">
