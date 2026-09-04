@@ -26,11 +26,11 @@ import {
 } from "@/types/schemas/ai-search";
 import { detectTarget } from "@/shared/targetDetection";
 import {
-import { DEFAULT_LOCATION_CODE } from "@/shared/keyword-locations";
   parseResearchTarget,
   toScopeSearchParam,
   type ResearchScope,
 } from "@/shared/researchScope";
+import { DEFAULT_LOCATION_CODE } from "@/shared/keyword-locations";
 
 type Props = {
   projectId: string;
