@@ -161,6 +161,12 @@ function createAuth() {
     ...baseAuthConfig,
     emailAndPassword: {
       ...baseAuthConfig.emailAndPassword,
+      // Upstream runs hosted mode as a public SaaS, where open registration is
+      // the point. This is a private instance for one team: the Google consent
+      // screen's test-user list is the allowlist, and an open "Create account"
+      // button would walk straight around it — anything but a throwaway inbox
+      // gets in. Social sign-up is unaffected, so Google remains the only door.
+      disableSignUp: true,
       requireEmailVerification: !bypassEmail,
       resetPasswordTokenExpiresIn: 60 * 60,
       revokeSessionsOnPasswordReset: true,
