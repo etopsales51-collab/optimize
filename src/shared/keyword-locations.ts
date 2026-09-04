@@ -16,10 +16,30 @@
  * googleAdsOnly entries must exist in BOTH the Google Ads and SERP language
  * lists (rank tracking shares this picker and uses the SERP API).
  *
- * Entries are sorted alphabetically by country name; pick US as the
- * product-wide default via DEFAULT_LOCATION_CODE below.
+ * Entries are sorted alphabetically by country name; the product-wide default
+ * is set by DEFAULT_LOCATION_CODE below.
  */
-export const DEFAULT_LOCATION_CODE = 2840;
+
+/**
+ * The United Arab Emirates: this deployment's home market, so every country
+ * picker starts here instead of the United States.
+ */
+export const DEFAULT_LOCATION_CODE = 2784;
+
+/**
+ * The markets this business actually trades in, pinned to the top of every
+ * country picker in this order. The rest of the world still follows,
+ * alphabetically — this is ordering, not a filter.
+ */
+export const PRIORITY_LOCATION_CODES: readonly number[] = [
+  2784, // United Arab Emirates
+  2682, // Saudi Arabia
+  2634, // Qatar
+  2512, // Oman
+  2048, // Bahrain
+  2414, // Kuwait
+  2710, // South Africa
+];
 
 /**
  * Human-readable form of a canonical DataForSEO location_name, whose segments

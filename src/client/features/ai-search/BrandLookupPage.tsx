@@ -26,6 +26,7 @@ import {
 } from "@/types/schemas/ai-search";
 import { detectTarget } from "@/shared/targetDetection";
 import {
+import { DEFAULT_LOCATION_CODE } from "@/shared/keyword-locations";
   parseResearchTarget,
   toScopeSearchParam,
   type ResearchScope,
@@ -131,7 +132,7 @@ function BrandLookupPageInner({
           query: trimmedInitialQuery,
           competitors: initialCompetitors,
           scope: initialScope,
-          locationCode: 2840,
+          locationCode: DEFAULT_LOCATION_CODE,
           languageCode: "en",
         },
       }),

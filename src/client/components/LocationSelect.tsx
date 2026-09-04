@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Search } from "lucide-react";
-import { LOCATION_OPTIONS } from "@/shared/keyword-locations";
+import {
+  LOCATION_OPTIONS,
+  PRIORITY_LOCATION_CODES,
+} from "@/shared/keyword-locations";
 
 type LocationOption = (typeof LOCATION_OPTIONS)[number];
 
@@ -42,10 +45,18 @@ export function LocationSelect({
 
   const selected = options.find((option) => option.code === value) ?? null;
 
-  const filtered = useMemo(
-    () => options.filter((option) => matches(option, query)),
-    [options, query],
-  );
+  // The markets this business serves lead the list; everything else keeps the
+  // alphabetical order it already had. Searching still reaches every country —
+  // this reorders, it never filters anyone out.
+  const filtered = useMemo(() => {
+    const rank = (option: LocationOption) => {
+      const index = PRIORITY_LOCATION_CODES.indexOf(option.code);
+      return index === -1 ? PRIORITY_LOCATION_CODES.length : index;
+    };
+    return options
+      .filter((option) => matches(option, query))
+      .sort((a, b) => rank(a) - rank(b));
+  }, [options, query]);
 
   // Reset transient state and focus the search input each time the menu opens.
   useEffect(() => {

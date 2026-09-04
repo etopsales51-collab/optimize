@@ -52,7 +52,7 @@ export const projects = sqliteTable(
     domain: text("domain"),
     // Default DataForSEO location/language for the project, set during
     // onboarding and reused by every project-scoped data call.
-    locationCode: integer("location_code").notNull().default(2840),
+    locationCode: integer("location_code").notNull().default(2784),
     languageCode: text("language_code").notNull().default("en"),
     createdAt: text("created_at")
       .notNull()
@@ -88,7 +88,7 @@ export const savedKeywords = sqliteTable(
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
     keyword: text("keyword").notNull(),
-    locationCode: integer("location_code").notNull().default(2840),
+    locationCode: integer("location_code").notNull().default(2784),
     languageCode: text("language_code").notNull().default("en"),
     createdAt: text("created_at")
       .notNull()
@@ -212,7 +212,7 @@ export const rankTrackingConfigs = sqliteTable(
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
     domain: text("domain").notNull(),
-    locationCode: integer("location_code").notNull().default(2840),
+    locationCode: integer("location_code").notNull().default(2784),
     languageCode: text("language_code").notNull().default("en"),
     devices: text("devices", {
       enum: ["both", "desktop", "mobile"],

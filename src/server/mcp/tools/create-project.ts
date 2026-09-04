@@ -28,7 +28,7 @@ const inputSchema = {
   locationCode: locationCodeSchema
     .optional()
     .describe(
-      "Optional DataForSEO location code for the project's default market (e.g. 2840 = United States, 2504 = Morocco). Falls back to the organization default when omitted.",
+      "Optional DataForSEO location code for the project's default market (e.g. 2784 = United Arab Emirates, 2682 = Saudi Arabia). Falls back to the organization default when omitted.",
     ),
   languageCode: languageCodeSchema
     .optional()

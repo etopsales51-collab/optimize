@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { isSupportedLanguageCode } from "@/shared/keyword-locations";
 
-export const DEFAULT_LOCATION_CODE = 2840;
+// The UAE: this deployment's home market, matching the app-wide default
+// in @/shared/keyword-locations so agent calls and the UI agree.
+export const DEFAULT_LOCATION_CODE = 2784;
 
 export const projectIdSchema = z
   .string()
