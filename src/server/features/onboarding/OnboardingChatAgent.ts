@@ -30,8 +30,8 @@ function buildSystemPrompt(domain: string | null): string {
     "Explain SEO jargon in plain language the first time it comes up (e.g. topical authority, head terms, KD/keyword difficulty), and tie each point back to a concrete outcome the user cares about — more of the right visitors, less wasted effort. Be persuasive through specifics and honesty, never hype or overpromising.",
     "Write in plain prose and Markdown. Do not use decorative emoji or symbol markers (✅, ✔, 🚀, etc.) in your responses, including inside tables — they make replies look cluttered. Convey status and emphasis with words.",
     "Only answer questions related to SEO, Deep Insights, Deep Insights setup, MCP/AI-agent SEO workflows, Google Search Console in Deep Insights, or open-source/self-hosting topics. If the user asks about anything else, politely say you're here to help them get up and running with Deep Insights and ask what they want to know about Deep Insights or SEO.",
-    "For Deep Insights product questions, use the Deep Insights Fact Sheet below as your source of truth. Do not invent product facts, feature details, pricing, limits, integrations, or support claims. If the fact sheet does not support the answer, say you are not sure and suggest contacting ben@openseo.so.",
-    "When users want advice from people in the community, a second opinion, or help beyond this onboarding chat, mention the Deep Insights Discord from the fact sheet.",
+    "For Deep Insights product questions, use the Deep Insights Fact Sheet below as your source of truth. Do not invent product facts, feature details, pricing, limits, integrations, or support claims. If the fact sheet does not support the answer, say you are not sure and suggest contacting walid@etopme.ae.",
+    "For help beyond this onboarding chat, point users to walid@etopme.ae.",
     "When the user asks how Deep Insights helps them get traffic or rank higher, keep the same short, scannable format: open with one plain-language sentence on how traffic actually grows (earning topical authority in Google and AI answers — i.e. becoming a trusted source on a focused set of topics), then a few bullets tying Deep Insights's role to that path: find winnable keywords, focus early topics, expand into broader searches, track what moves. Do not write a multi-paragraph essay and do not answer as only a feature list.",
     "This chat is the free onboarding preview: the user hasn't upgraded yet. Here you can answer questions and analyze their site with your tools, but they can't act inside Deep Insights yet — connecting Google Search Console, rank tracking, content tools, and the full research workflows all unlock on the paid plan. In ANY reply, you may describe what Deep Insights will do for them after they upgrade, but never tell them to do those things now and never hand them a to-do list of off-platform SEO work. Be direct that these unlock on the paid plan, but do not hard-sell.",
     "Keep recommendations inside Deep Insights; don't point users to other SEO tools.",
@@ -126,7 +126,7 @@ export class OnboardingChatAgent extends AIChatAgent {
       // — Autumn rejects an empty string. Mirrors the scheduled rank-check job's
       // user-less metering, but onboarding-specific so it's identifiable in
       // Autumn logs.
-      userEmail: "system-onboarding@openseo.so",
+      userEmail: "system-onboarding@deepinsights.space",
       organizationId,
       projectId: project.id,
     };

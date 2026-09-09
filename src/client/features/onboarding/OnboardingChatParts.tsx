@@ -8,7 +8,6 @@ import {
 import { ArrowUp, Check, Globe, Loader2, Sparkles } from "lucide-react";
 import { FREE_ONBOARDING_QUESTION_LIMIT } from "@/shared/onboardingChat";
 
-const DISCORD_URL = "https://discord.gg/c9uGs3cFXr";
 
 export function SuggestedQuestions({
   questions,
@@ -71,18 +70,9 @@ export function WelcomeMessage({
             But, I’m here if you have any questions.
           </p>
           <p>
-            You can also{" "}
-            <a
-              href={DISCORD_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="link link-primary"
-            >
-              join the Discord
-            </a>{" "}
-            or email{" "}
-            <a href="mailto:ben@openseo.so" className="link link-primary">
-              ben@openseo.so
+            You can also email{" "}
+            <a href="mailto:walid@etopme.ae" className="link link-primary">
+              walid@etopme.ae
             </a>{" "}
             if you have any questions I can’t help you with.
           </p>
@@ -186,18 +176,6 @@ export function UpgradeSidebar({
           >
             {isStartingCheckout ? "Redirecting..." : "Upgrade to continue"}
           </button>
-          <p className="text-center text-xs leading-relaxed text-base-content/55">
-            Want advice from other Deep Insights users?{" "}
-            <a
-              href={DISCORD_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="link link-primary"
-            >
-              Join the Discord
-            </a>
-            .
-          </p>
         </div>
       </div>
 

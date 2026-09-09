@@ -133,12 +133,14 @@ export function createOpenSeoMcpServer(authProps: McpProps) {
       version: "0.0.12",
       description:
         "SEO research tools for AI agents: keyword research and metrics, SERP and local SERP results, domain and backlink analysis, rank tracking, and Google Search Console performance.",
-      websiteUrl: "https://openseo.so",
+      websiteUrl: "https://seo.deepinsights.space",
+      // Served from our own /public, so MCP clients show our mark rather than
+      // fetching upstream's from their domain.
       icons: [
         {
-          src: "https://openseo.so/android-chrome-512x512.png",
+          src: "https://seo.deepinsights.space/apple-touch-icon.png",
           mimeType: "image/png",
-          sizes: ["512x512"],
+          sizes: ["180x180"],
         },
       ],
     },

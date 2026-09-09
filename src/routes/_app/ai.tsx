@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowUpRight, ShieldAlert } from "lucide-react";
+import { ShieldAlert } from "lucide-react";
 import { getAuthMode, isHostedClientAuthMode } from "@/lib/auth-mode";
 import { captureClientEvent } from "@/client/lib/posthog";
 import { ClaudeIcon, CodexIcon } from "@/client/features/ai-mcp/AgentIcons";
@@ -10,33 +10,7 @@ import {
   CopyButton,
 } from "@/client/features/ai-mcp/SetupControls";
 
-const DISCORD_URL = "https://discord.gg/c9uGs3cFXr";
-const SUPPORT_EMAIL = "ben@openseo.so";
-const SAM_GITHUB_URL = "https://github.com/every-app/sam";
-const SKILL_NAMES = [
-  "seo-project-setup",
-  "seo-coach",
-  "keyword-research",
-  "keyword-clustering",
-  "competitive-landscape",
-  "competitor-analysis",
-  "link-prospecting",
-  "local-seo",
-  "seo-audit",
-];
-const SKILLS_INSTALL = `npx skills add every-app/open-seo`;
-const ALL_SKILLS_INSTALL = `npx skills add every-app/open-seo --skill '*'`;
-const CLAUDE_CODE_SKILLS_INSTALL = `npx skills add every-app/open-seo --skill '*' --agent claude-code`;
-const CODEX_SKILLS_INSTALL = `npx skills add every-app/open-seo --skill '*' --agent codex`;
-const SKILLS_MANUAL_INSTALL = `git clone https://github.com/every-app/open-seo.git
-
-# Codex
-mkdir -p ~/.codex/skills
-cp -R open-seo/.agents/skills/* ~/.codex/skills/
-
-# Claude Code
-mkdir -p ~/.claude/skills
-cp -R open-seo/.agents/skills/* ~/.claude/skills/`;
+const SUPPORT_EMAIL = "walid@etopme.ae";
 
 export const Route = createFileRoute("/_app/ai")({
   component: AiPage,
@@ -45,7 +19,7 @@ export const Route = createFileRoute("/_app/ai")({
 function AiPage() {
   const mcpUrl =
     typeof window === "undefined"
-      ? "https://app.openseo.so/mcp"
+      ? "https://seo.deepinsights.space/mcp"
       : `${window.location.origin}/mcp`;
 
   return (
@@ -62,15 +36,7 @@ function AiPage() {
             <ShieldAlert className="size-4 shrink-0" />
             <span>
               This instance is behind Cloudflare Access. MCP clients cannot
-              connect until Managed OAuth is enabled on your Access application.{" "}
-              <a
-                href="https://openseo.so/docs/self-hosting/cloudflare#connect-the-mcp-server-through-cloudflare-access"
-                target="_blank"
-                rel="noreferrer"
-                className="link font-medium"
-              >
-                Setup guide
-              </a>
+              connect until Managed OAuth is enabled on your Access application.
             </span>
           </div>
         ) : null}
@@ -123,7 +89,7 @@ function AiPage() {
                 Run this in your terminal:
               </p>
               <CodeBlock
-                code={`claude mcp add --transport http --scope user openseo ${mcpUrl}`}
+                code={`claude mcp add --transport http --scope user deep-insights ${mcpUrl}`}
                 onCopy={() =>
                   captureClientEvent("mcp:setup_command_copy", {
                     agent: "claude-code",
@@ -182,7 +148,7 @@ function AiPage() {
                 Run this in your terminal:
               </p>
               <CodeBlock
-                code={`codex mcp add openseo --url ${mcpUrl}`}
+                code={`codex mcp add deep-insights --url ${mcpUrl}`}
                 onCopy={() =>
                   captureClientEvent("mcp:setup_command_copy", {
                     agent: "codex",
@@ -222,139 +188,15 @@ function AiPage() {
           </div>
         </section>
 
-        <section className="mt-12">
-          <h2 className="text-base font-semibold">Deep Insights Skills</h2>
-          <p className="mt-1.5 text-sm text-base-content/70 leading-relaxed">
-            Skills give Codex and Claude Code reusable SEO workflows that can
-            call your Deep Insights MCP tools when live SERP, keyword, backlink, or
-            domain data is needed.
-          </p>
-          <div className="mt-4 divide-y divide-base-300 overflow-hidden rounded-lg border border-base-300 bg-base-200">
-            <Collapsible
-              id="skills-add"
-              title="Install with skills add"
-              subtitle="Recommended cross-agent installer"
-            >
-              <CodeBlock code={SKILLS_INSTALL} />
-              <p className="text-sm text-base-content/70">
-                You can also auto-accept each Deep Insights skill:
-              </p>
-              <CodeBlock code={ALL_SKILLS_INSTALL} />
-            </Collapsible>
-            <Collapsible
-              id="claude-code-skills"
-              title="Install for Claude Code"
-              subtitle="Target Claude Code only"
-              icon={<ClaudeIcon className="size-5" />}
-            >
-              <CodeBlock code={CLAUDE_CODE_SKILLS_INSTALL} />
-            </Collapsible>
-            <Collapsible
-              id="codex-skills"
-              title="Install for Codex"
-              subtitle="Target OpenAI Codex only"
-              icon={<CodexIcon className="size-5" />}
-            >
-              <CodeBlock code={CODEX_SKILLS_INSTALL} />
-            </Collapsible>
-            <Collapsible
-              id="manual-skills"
-              title="Manual GitHub install"
-              subtitle="Clone the repo and copy the skills"
-            >
-              <CodeBlock code={SKILLS_MANUAL_INSTALL} />
-            </Collapsible>
-          </div>
-          <div className="mt-5">
-            <p className="text-sm text-base-content/70 leading-relaxed">
-              Start with{" "}
-              <span className="font-mono text-base-content">
-                /seo-project-setup
-              </span>
-              . It will ask about your project and save your goals, positioning,
-              and competitors to your project context.
-            </p>
-            <p className="mt-4 text-xs font-medium uppercase tracking-wide text-base-content/50">
-              Available skills
-            </p>
-            <ul className="mt-2 grid gap-1.5 text-sm text-base-content/70 sm:grid-cols-2">
-              {SKILL_NAMES.map((skill) => (
-                <li key={skill} className="flex gap-2">
-                  <span className="text-base-content/35">-</span>
-                  <span>{skill}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
-
-        <section className="mt-12">
+                <section className="mt-12">
           <h2 className="text-base font-semibold">Available tools</h2>
           <div className="mt-5">
             <AvailableTools />
           </div>
         </section>
 
-        <section className="mt-12">
-          <h2 className="text-base font-semibold">Sam: AI SEO teammate</h2>
-          <p className="mt-1.5 text-sm text-base-content/70 leading-relaxed">
-            Sam is an experimental content workflow for Claude Code and other
-            coding agents. It combines keyword research, source discovery,
-            drafting, and QA.
-          </p>
-          <a
-            href={SAM_GITHUB_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-base-content transition-colors hover:text-base-content/60"
-          >
-            View Sam on GitHub
-            <ArrowUpRight className="size-3.5" />
-          </a>
-        </section>
-
-        <section className="mt-12">
-          <h2 className="text-base font-semibold">Roadmap</h2>
-          <ul className="mt-4 space-y-3">
-            {[
-              {
-                title: "In-app SEO Research Agent",
-                description:
-                  "Ask questions and run research without leaving Deep Insights",
-              },
-              {
-                title: "Content Assistant",
-                description:
-                  "Generate drafts using saved keywords and business context",
-              },
-            ].map((item) => (
-              <li key={item.title} className="flex gap-2.5 text-sm">
-                <span className="mt-[2px] shrink-0 text-base-content/40">
-                  &mdash;
-                </span>
-                <span className="text-base-content/70">
-                  <span className="font-medium text-base-content">
-                    {item.title}
-                  </span>
-                  <br />
-                  {item.description}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-
         <p className="mt-12 text-xs text-base-content/55 leading-relaxed">
-          Have feedback? Reach out on{" "}
-          <a
-            className="link link-primary"
-            href={DISCORD_URL}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Discord
-          </a>{" "}
-          or email{" "}
+          Questions about this instance? Email{" "}
           <a className="link link-primary" href={`mailto:${SUPPORT_EMAIL}`}>
             {SUPPORT_EMAIL}
           </a>
