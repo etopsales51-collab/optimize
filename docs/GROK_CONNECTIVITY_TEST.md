@@ -2,7 +2,8 @@
 
 Hand this file to Grok (or paste the prompt in section 3). It has two jobs:
 prove the connection end to end, and run one small, real research pass on
-wacomme.ae so we see any issue before the write path goes live.
+wacomme.ae. Section 3 is the read-only first run; section 4 is the live write
+path and the standing routine prompt to use from now on.
 
 ---
 
@@ -21,9 +22,9 @@ wacomme.ae so we see any issue before the write path goes live.
 Deep Insights → **Settings** → **API keys** → generate. The key starts with
 `oseo_`. Anonymous calls to `/mcp` return `401` by design.
 
-Tools available today: **46 read tools** (projects, keywords, SERP, domain,
-backlinks, rank tracking, site audit, Search Console, GA4, local SEO). There
-are **no Optimize write tools yet** — see section 4.
+Tools available: **46 read tools** (projects, keywords, SERP, domain,
+backlinks, rank tracking, site audit, Search Console, GA4, local SEO) plus
+**9 Optimize tools** for proposing work — see section 4.
 
 A server instruction is baked into the MCP handshake: research tools spend
 DataForSEO credits; ask before planned batches over 2,000 credits. This test
