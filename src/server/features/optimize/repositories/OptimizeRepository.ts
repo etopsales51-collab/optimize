@@ -11,6 +11,8 @@
 import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  auditPages,
+  audits,
   optimizeComments,
   optimizeJobEvents,
   optimizeRecommendations,
@@ -338,6 +340,48 @@ async function listJobEvents(recommendationId: string) {
     .limit(200);
 }
 
+
+// ---------------------------------------------------------------------------
+// Crawl inventory (read-only view over the latest site audit)
+// ---------------------------------------------------------------------------
+
+/**
+ * Every page the most recent audit fetched, with the fields the overlap scan
+ * needs. Lives here rather than widening AuditRepository.getPagesForAudit so
+ * the Optimize feature owns its own query and upstream merges stay clean.
+ *
+ * Redirect-source rows are returned as-is (statusCode 3xx + redirectUrl) and
+ * filtered by the caller: the crawler records /path and /path/ separately on
+ * purpose, and only the 200 row is a page.
+ */
+async function listCrawlInventoryForProject(projectId: string) {
+  const latest = await db.query.audits.findFirst({
+    where: eq(audits.projectId, projectId),
+    orderBy: desc(audits.startedAt),
+    columns: { id: true, startedAt: true, status: true },
+  });
+  if (!latest) return { auditId: null, startedAt: null, pages: [] };
+
+  const pages = await db
+    .select({
+      id: auditPages.id,
+      url: auditPages.url,
+      statusCode: auditPages.statusCode,
+      redirectUrl: auditPages.redirectUrl,
+      fetchClass: auditPages.fetchClass,
+      title: auditPages.title,
+      ogTitle: auditPages.ogTitle,
+      metaDescription: auditPages.metaDescription,
+      inSitemap: auditPages.inSitemap,
+      internalLinkCount: auditPages.internalLinkCount,
+      wordCount: auditPages.wordCount,
+    })
+    .from(auditPages)
+    .where(eq(auditPages.auditId, latest.id));
+
+  return { auditId: latest.id, startedAt: latest.startedAt, pages };
+}
+
 export const OptimizeRepository = {
   createRecommendation,
   updateRecommendation,
@@ -348,4 +392,5 @@ export const OptimizeRepository = {
   listComments,
   addJobEvent,
   listJobEvents,
+  listCrawlInventoryForProject,
 } as const;

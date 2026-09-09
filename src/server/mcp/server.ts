@@ -37,6 +37,17 @@ import {
 import { createProjectTool } from "@/server/mcp/tools/create-project";
 import { listProjectsTool } from "@/server/mcp/tools/list-projects";
 import {
+  addOptimizeCommentTool,
+  analyzeIntentOverlapTool,
+  createOptimizeRecommendationTool,
+  getOptimizeRecommendationTool,
+  listAccessibleModulesTool,
+  listOptimizeCommentsTool,
+  listOptimizeRecommendationsTool,
+  requestModuleAccessTool,
+  updateOptimizeRecommendationTool,
+} from "@/server/mcp/tools/optimize-tools";
+import {
   getProjectContextTool,
   updateProjectContextTool,
 } from "@/server/mcp/tools/project-context";
@@ -205,6 +216,17 @@ export function createOpenSeoMcpServer(authProps: McpProps) {
   register(getAuditStatusTool);
   register(getAuditIssuesTool);
   register(getAuditPagesTool);
+  // Optimize: agents propose here, staff approve in the UI. Nothing these
+  // tools write can reach a live site without a human clicking Approve.
+  register(analyzeIntentOverlapTool);
+  register(createOptimizeRecommendationTool);
+  register(updateOptimizeRecommendationTool);
+  register(listOptimizeRecommendationsTool);
+  register(getOptimizeRecommendationTool);
+  register(addOptimizeCommentTool);
+  register(listOptimizeCommentsTool);
+  register(listAccessibleModulesTool);
+  register(requestModuleAccessTool);
 
   return server;
 }
