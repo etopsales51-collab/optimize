@@ -6,7 +6,7 @@
  * The server-side twin is isBillingEnabled() in server/lib/runtime-env.ts;
  * both are constants so billing cannot switch itself back on via an env var.
  */
-export const BILLING_ENABLED = false;
+export const BILLING_ENABLED: boolean = false;
 
 export const BILLING_ROUTE = "/billing";
 export const SUBSCRIBE_ROUTE = "/subscribe";
