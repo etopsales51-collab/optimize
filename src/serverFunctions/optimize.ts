@@ -116,6 +116,23 @@ export const approveOptimizeRecommendation = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/**
+ * Put a failed publish back into `approved` so it can be tried again after the
+ * cause is fixed — usually a credential corrected in Project settings.
+ * Publishing then re-runs every gate; this does not skip any of them.
+ */
+export const retryOptimizePublish = createServerFn({ method: "POST" })
+  .middleware(requireProjectContext)
+  .validator(recommendationScopedSchema)
+  .handler(async ({ data, context }) => {
+    await OptimizeService.retryPublish({
+      id: data.id,
+      projectId: context.projectId,
+      actor: userActor(context),
+    });
+    return { ok: true };
+  });
+
 export const dismissOptimizeRecommendation = createServerFn({ method: "POST" })
   .middleware(requireProjectContext)
   .validator(

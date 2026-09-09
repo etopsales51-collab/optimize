@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   Check,
   ExternalLink,
+  RotateCcw,
   Upload,
   X,
 } from "lucide-react";
@@ -26,8 +27,9 @@ import {
   previewOptimizePublish,
   publishOptimizeRecommendation,
   requestOptimizeChanges,
+  retryOptimizePublish,
 } from "@/serverFunctions/optimize";
-import { canApprove, isExecutable } from "@/shared/optimize";
+import { canApprove, canRetryPublish, isExecutable } from "@/shared/optimize";
 
 export const Route = createFileRoute(
   "/_project/p/$projectId/optimize/$recommendationId",
@@ -126,6 +128,17 @@ function OptimizeDetailPage() {
       toast.error(getStandardErrorMessage(err, "Publishing failed.")),
   });
 
+  const retryMutation = useMutation({
+    mutationFn: () =>
+      retryOptimizePublish({ data: { projectId, id: recommendationId } }),
+    onSuccess: () => {
+      toast.success("Ready to publish again");
+      refresh();
+    },
+    onError: (err) =>
+      toast.error(getStandardErrorMessage(err, "Could not reset this.")),
+  });
+
   const dismissMutation = useMutation({
     mutationFn: () =>
       dismissOptimizeRecommendation({
@@ -166,6 +179,8 @@ function OptimizeDetailPage() {
   const check = recommendation.cannibalizationCheck;
   const approvable = canApprove(recommendation.status);
   const publishable = isExecutable(recommendation.status);
+  const retryable = canRetryPublish(recommendation.status);
+  const failureReason = recommendation.execution.error;
 
   return (
     <div className="overflow-auto px-4 py-4 pb-24 md:px-6 md:py-6 md:pb-8">
@@ -244,14 +259,42 @@ function OptimizeDetailPage() {
             Dismiss
           </button>
 
+          {retryable ? (
+            <button
+              type="button"
+              className="btn btn-sm gap-1.5"
+              disabled={retryMutation.isPending}
+              onClick={() => retryMutation.mutate()}
+            >
+              <RotateCcw className="size-4" />
+              {retryMutation.isPending ? "Resetting…" : "Retry publish"}
+            </button>
+          ) : null}
+
           <p className="ml-auto text-xs text-base-content/50">
             {approvable
               ? "Approving records your decision. Publishing is a separate step."
               : publishable
                 ? "Approved. Publish when you are ready."
-                : `No action available while this is ${recommendation.status.replace("_", " ")}.`}
+                : retryable
+                  ? "Publishing failed. Fix the cause, then retry."
+                  : `No action available while this is ${recommendation.status.replace("_", " ")}.`}
           </p>
         </div>
+
+        {retryable && failureReason ? (
+          <div className="rounded-lg border border-error/40 bg-error/10 p-4">
+            <p className="flex items-center gap-2 text-sm font-semibold">
+              <AlertTriangle className="size-4" />
+              Publishing failed
+            </p>
+            <p className="mt-1 text-sm text-base-content/80">{failureReason}</p>
+            <p className="mt-2 text-xs text-base-content/60">
+              The approval still stands. Fix the cause — usually the connection
+              in Project settings &rarr; Publishing — then Retry publish.
+            </p>
+          </div>
+        ) : null}
 
         {publishable ? (
           <div className="rounded-lg border border-base-300 bg-base-100 p-4">

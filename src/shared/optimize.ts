@@ -66,9 +66,9 @@ export const OPTIMIZE_TYPE_LABELS: Record<OptimizeType, string> = {
 // State machine
 //
 // One table, read by the service and by the UI's button states, so "why is
-// Approve disabled" has exactly one answer. Terminal states have no exits;
-// a finished job is re-run by creating a new recommendation, not by reviving
-// this one.
+// Approve disabled" has exactly one answer. Succeeded, cancelled and dismissed
+// are final — a finished job is re-run by creating a new recommendation, not by
+// reviving this one. `failed` is the exception, and the reason is below.
 // ---------------------------------------------------------------------------
 
 export const OPTIMIZE_TRANSITIONS: Record<OptimizeStatus, OptimizeStatus[]> = {
@@ -80,7 +80,12 @@ export const OPTIMIZE_TRANSITIONS: Record<OptimizeStatus, OptimizeStatus[]> = {
   approved: ["running", "cancelled"],
   running: ["succeeded", "failed"],
   succeeded: [],
-  failed: [],
+  // A failed publish is recoverable, not final. The failure is almost always
+  // operational — a wrong credential, a site that was briefly unreachable —
+  // while the human approval of the CONTENT still stands. Retrying returns it
+  // to `approved`, from which publishing runs every gate again. It never
+  // re-enters the queue unapproved, so this is not a way around review.
+  failed: ["approved", "dismissed"],
   cancelled: [],
   dismissed: [],
 };
@@ -95,6 +100,11 @@ export function canTransition(
 /** Approve is a staff action and only ever legal from a submitted proposal. */
 export function canApprove(status: OptimizeStatus): boolean {
   return status === "pending_approval";
+}
+
+/** A failed publish can be retried once the underlying problem is fixed. */
+export function canRetryPublish(status: OptimizeStatus): boolean {
+  return status === "failed";
 }
 
 /** Nothing may reach WordPress unless it passed through Approve. */

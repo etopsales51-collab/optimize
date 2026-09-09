@@ -317,6 +317,43 @@ async function approve(input: {
   });
 }
 
+/**
+ * Return a failed publish to `approved` so it can be tried again.
+ *
+ * Deliberately does NOT re-open review: the content was already approved and
+ * has not changed, and the failure was in the writing, not the decision. It
+ * lands back in `approved`, where publishing re-runs every gate — status,
+ * project switch, dry run — before touching anything.
+ */
+async function retryPublish(input: {
+  id: string;
+  projectId: string;
+  actor: UserActor;
+}) {
+  const existing = await loadOrThrow(input.id, input.projectId);
+  if (existing.status !== "failed") {
+    throw new AppError(
+      "CONFLICT",
+      `Only a failed publish can be retried; this one is ${existing.status}.`,
+    );
+  }
+
+  await OptimizeRepository.updateRecommendation(input.id, input.projectId, {
+    status: "approved",
+    // Clear the previous error so the UI does not show a stale failure next
+    // to a fresh attempt.
+    execution: { channel: existing.execution.channel },
+  });
+
+  await OptimizeRepository.addJobEvent({
+    id: crypto.randomUUID(),
+    recommendationId: input.id,
+    eventType: "publish_retry_queued",
+    actor: actorKey(input.actor),
+    detail: { previousError: existing.execution.error },
+  });
+}
+
 async function dismiss(input: {
   id: string;
   projectId: string;
@@ -378,6 +415,7 @@ export const OptimizeService = {
   updateRecommendation,
   requestChanges,
   approve,
+  retryPublish,
   dismiss,
   addComment,
   get: loadOrThrow,

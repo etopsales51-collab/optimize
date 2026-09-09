@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canApprove,
+  canRetryPublish,
   canTransition,
   isExecutable,
   newPageBriefAllowed,
@@ -76,10 +77,27 @@ describe("approval gate", () => {
     expect(canTransition("changes_requested", "approved")).toBe(false);
   });
 
-  it("treats finished states as terminal", () => {
-    for (const status of ["succeeded", "failed", "cancelled", "dismissed"] as const) {
+  it("treats succeeded, cancelled and dismissed as terminal", () => {
+    for (const status of ["succeeded", "cancelled", "dismissed"] as const) {
       expect(canTransition(status, "pending_approval")).toBe(false);
       expect(canTransition(status, "approved")).toBe(false);
+    }
+  });
+
+  it("lets a failed publish be retried, but never back into review", () => {
+    // The failure is operational — a bad credential, an unreachable site —
+    // while the approval of the content still stands. So it returns to
+    // `approved`, where publishing re-runs every gate...
+    expect(canRetryPublish("failed")).toBe(true);
+    expect(canTransition("failed", "approved")).toBe(true);
+    // ...and never to pending_approval, which would let a failed item sit in
+    // the review queue as though it had not been approved.
+    expect(canTransition("failed", "pending_approval")).toBe(false);
+  });
+
+  it("offers retry only for a failed publish", () => {
+    for (const status of OPTIMIZE_STATUSES) {
+      expect(canRetryPublish(status)).toBe(status === "failed");
     }
   });
 });
