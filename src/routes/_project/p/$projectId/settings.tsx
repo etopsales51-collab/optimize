@@ -11,6 +11,7 @@ const tabs = [
   { to: "/p/$projectId/settings" as const, label: "General", exact: true },
   { to: "/p/$projectId/settings/context" as const, label: "Context" },
   { to: "/p/$projectId/settings/integrations" as const, label: "Integrations" },
+  { to: "/p/$projectId/settings/publishing" as const, label: "Publishing" },
 ];
 
 function ProjectSettingsLayout() {

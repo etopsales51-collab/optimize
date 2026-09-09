@@ -1,6 +1,13 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowLeft, Check, ExternalLink, X } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Check,
+  ExternalLink,
+  Upload,
+  X,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { BeforeAfter } from "@/client/features/optimize/BeforeAfter";
@@ -16,9 +23,11 @@ import {
   approveOptimizeRecommendation,
   dismissOptimizeRecommendation,
   getOptimizeRecommendation,
+  previewOptimizePublish,
+  publishOptimizeRecommendation,
   requestOptimizeChanges,
 } from "@/serverFunctions/optimize";
-import { canApprove } from "@/shared/optimize";
+import { canApprove, isExecutable } from "@/shared/optimize";
 
 export const Route = createFileRoute(
   "/_project/p/$projectId/optimize/$recommendationId",
@@ -92,6 +101,31 @@ function OptimizeDetailPage() {
       toast.error(getStandardErrorMessage(err, "Could not request changes.")),
   });
 
+  // Publishing is a second, deliberate action after approval — approving
+  // records the decision, this writes to the live site. The preview runs the
+  // same dry run the server insists on, so staff see the exact fields first.
+  const previewMutation = useMutation({
+    mutationFn: () =>
+      previewOptimizePublish({ data: { projectId, id: recommendationId } }),
+    onError: (err) =>
+      toast.error(getStandardErrorMessage(err, "Could not preview publishing.")),
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: () =>
+      publishOptimizeRecommendation({ data: { projectId, id: recommendationId } }),
+    onSuccess: (result) => {
+      if (result.ok) {
+        toast.success("Published to the live site");
+      } else {
+        toast.error(result.reason ?? "Publishing failed");
+      }
+      refresh();
+    },
+    onError: (err) =>
+      toast.error(getStandardErrorMessage(err, "Publishing failed.")),
+  });
+
   const dismissMutation = useMutation({
     mutationFn: () =>
       dismissOptimizeRecommendation({
@@ -131,6 +165,7 @@ function OptimizeDetailPage() {
   const { recommendation, comments } = data;
   const check = recommendation.cannibalizationCheck;
   const approvable = canApprove(recommendation.status);
+  const publishable = isExecutable(recommendation.status);
 
   return (
     <div className="overflow-auto px-4 py-4 pb-24 md:px-6 md:py-6 md:pb-8">
@@ -211,10 +246,72 @@ function OptimizeDetailPage() {
 
           <p className="ml-auto text-xs text-base-content/50">
             {approvable
-              ? "Approving does not publish yet — execution is not wired up."
-              : `No action available while this is ${recommendation.status.replace("_", " ")}.`}
+              ? "Approving records your decision. Publishing is a separate step."
+              : publishable
+                ? "Approved. Publish when you are ready."
+                : `No action available while this is ${recommendation.status.replace("_", " ")}.`}
           </p>
         </div>
+
+        {publishable ? (
+          <div className="rounded-lg border border-base-300 bg-base-100 p-4">
+            <h3 className="text-sm font-semibold">Publish to the live site</h3>
+            <p className="mt-1 text-sm text-base-content/70">
+              Writes the SEO title and meta description only. The product name,
+              price, stock and status are never changed.
+            </p>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="btn btn-sm"
+                disabled={previewMutation.isPending}
+                onClick={() => previewMutation.mutate()}
+              >
+                {previewMutation.isPending ? "Checking…" : "Check what would change"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm gap-1.5"
+                disabled={publishMutation.isPending}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      "Publish these SEO changes to the live site now?",
+                    )
+                  ) {
+                    publishMutation.mutate();
+                  }
+                }}
+              >
+                <Upload className="size-4" />
+                {publishMutation.isPending ? "Publishing…" : "Publish now"}
+              </button>
+            </div>
+
+            {previewMutation.data ? (
+              previewMutation.data.ok ? (
+                <ul className="mt-3 space-y-2 text-sm">
+                  {(previewMutation.data.changes ?? []).map((change) => (
+                    <li key={change.field} className="rounded-md bg-base-200/60 p-2">
+                      <p className="text-xs font-medium uppercase tracking-wide text-base-content/50">
+                        {change.label}
+                      </p>
+                      <p className="mt-0.5 text-base-content/60 line-through">
+                        {change.before || "(empty)"}
+                      </p>
+                      <p className="text-success">{change.after}</p>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-3 text-sm text-warning">
+                  {previewMutation.data.reason}
+                </p>
+              )
+            ) : null}
+          </div>
+        ) : null}
 
         {check && check.status !== "clear" ? (
           <div className="rounded-lg border border-warning/40 bg-warning/10 p-4">

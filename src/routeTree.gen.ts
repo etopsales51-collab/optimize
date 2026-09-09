@@ -58,6 +58,7 @@ import { Route as ProjectPProjectIdSettingsIndexRouteImport } from './routes/_pr
 import { Route as ProjectPProjectIdRankTrackingIndexRouteImport } from './routes/_project/p/$projectId/rank-tracking/index'
 import { Route as ProjectPProjectIdOptimizeIndexRouteImport } from './routes/_project/p/$projectId/optimize/index'
 import { Route as ProjectPProjectIdAuditIndexRouteImport } from './routes/_project/p/$projectId/audit/index'
+import { Route as ProjectPProjectIdSettingsPublishingRouteImport } from './routes/_project/p/$projectId/settings/publishing'
 import { Route as ProjectPProjectIdSettingsIntegrationsRouteImport } from './routes/_project/p/$projectId/settings/integrations'
 import { Route as ProjectPProjectIdSettingsContextRouteImport } from './routes/_project/p/$projectId/settings/context'
 import { Route as ProjectPProjectIdRankTrackingConfigIdRouteImport } from './routes/_project/p/$projectId/rank-tracking/$configId'
@@ -320,6 +321,12 @@ const ProjectPProjectIdAuditIndexRoute =
     path: '/',
     getParentRoute: () => ProjectPProjectIdAuditRoute,
   } as any)
+const ProjectPProjectIdSettingsPublishingRoute =
+  ProjectPProjectIdSettingsPublishingRouteImport.update({
+    id: '/publishing',
+    path: '/publishing',
+    getParentRoute: () => ProjectPProjectIdSettingsRoute,
+  } as any)
 const ProjectPProjectIdSettingsIntegrationsRoute =
   ProjectPProjectIdSettingsIntegrationsRouteImport.update({
     id: '/integrations',
@@ -397,6 +404,7 @@ export interface FileRoutesByFullPath {
   '/p/$projectId/rank-tracking/$configId': typeof ProjectPProjectIdRankTrackingConfigIdRoute
   '/p/$projectId/settings/context': typeof ProjectPProjectIdSettingsContextRoute
   '/p/$projectId/settings/integrations': typeof ProjectPProjectIdSettingsIntegrationsRoute
+  '/p/$projectId/settings/publishing': typeof ProjectPProjectIdSettingsPublishingRoute
   '/p/$projectId/audit/': typeof ProjectPProjectIdAuditIndexRoute
   '/p/$projectId/optimize/': typeof ProjectPProjectIdOptimizeIndexRoute
   '/p/$projectId/rank-tracking/': typeof ProjectPProjectIdRankTrackingIndexRoute
@@ -444,6 +452,7 @@ export interface FileRoutesByTo {
   '/p/$projectId/rank-tracking/$configId': typeof ProjectPProjectIdRankTrackingConfigIdRoute
   '/p/$projectId/settings/context': typeof ProjectPProjectIdSettingsContextRoute
   '/p/$projectId/settings/integrations': typeof ProjectPProjectIdSettingsIntegrationsRoute
+  '/p/$projectId/settings/publishing': typeof ProjectPProjectIdSettingsPublishingRoute
   '/p/$projectId/audit': typeof ProjectPProjectIdAuditIndexRoute
   '/p/$projectId/optimize': typeof ProjectPProjectIdOptimizeIndexRoute
   '/p/$projectId/rank-tracking': typeof ProjectPProjectIdRankTrackingIndexRoute
@@ -501,6 +510,7 @@ export interface FileRoutesById {
   '/_project/p/$projectId/rank-tracking/$configId': typeof ProjectPProjectIdRankTrackingConfigIdRoute
   '/_project/p/$projectId/settings/context': typeof ProjectPProjectIdSettingsContextRoute
   '/_project/p/$projectId/settings/integrations': typeof ProjectPProjectIdSettingsIntegrationsRoute
+  '/_project/p/$projectId/settings/publishing': typeof ProjectPProjectIdSettingsPublishingRoute
   '/_project/p/$projectId/audit/': typeof ProjectPProjectIdAuditIndexRoute
   '/_project/p/$projectId/optimize/': typeof ProjectPProjectIdOptimizeIndexRoute
   '/_project/p/$projectId/rank-tracking/': typeof ProjectPProjectIdRankTrackingIndexRoute
@@ -555,6 +565,7 @@ export interface FileRouteTypes {
     | '/p/$projectId/rank-tracking/$configId'
     | '/p/$projectId/settings/context'
     | '/p/$projectId/settings/integrations'
+    | '/p/$projectId/settings/publishing'
     | '/p/$projectId/audit/'
     | '/p/$projectId/optimize/'
     | '/p/$projectId/rank-tracking/'
@@ -602,6 +613,7 @@ export interface FileRouteTypes {
     | '/p/$projectId/rank-tracking/$configId'
     | '/p/$projectId/settings/context'
     | '/p/$projectId/settings/integrations'
+    | '/p/$projectId/settings/publishing'
     | '/p/$projectId/audit'
     | '/p/$projectId/optimize'
     | '/p/$projectId/rank-tracking'
@@ -658,6 +670,7 @@ export interface FileRouteTypes {
     | '/_project/p/$projectId/rank-tracking/$configId'
     | '/_project/p/$projectId/settings/context'
     | '/_project/p/$projectId/settings/integrations'
+    | '/_project/p/$projectId/settings/publishing'
     | '/_project/p/$projectId/audit/'
     | '/_project/p/$projectId/optimize/'
     | '/_project/p/$projectId/rank-tracking/'
@@ -1028,6 +1041,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectPProjectIdAuditIndexRouteImport
       parentRoute: typeof ProjectPProjectIdAuditRoute
     }
+    '/_project/p/$projectId/settings/publishing': {
+      id: '/_project/p/$projectId/settings/publishing'
+      path: '/publishing'
+      fullPath: '/p/$projectId/settings/publishing'
+      preLoaderRoute: typeof ProjectPProjectIdSettingsPublishingRouteImport
+      parentRoute: typeof ProjectPProjectIdSettingsRoute
+    }
     '/_project/p/$projectId/settings/integrations': {
       id: '/_project/p/$projectId/settings/integrations'
       path: '/integrations'
@@ -1146,6 +1166,7 @@ const ProjectPProjectIdRankTrackingRouteWithChildren =
 interface ProjectPProjectIdSettingsRouteChildren {
   ProjectPProjectIdSettingsContextRoute: typeof ProjectPProjectIdSettingsContextRoute
   ProjectPProjectIdSettingsIntegrationsRoute: typeof ProjectPProjectIdSettingsIntegrationsRoute
+  ProjectPProjectIdSettingsPublishingRoute: typeof ProjectPProjectIdSettingsPublishingRoute
   ProjectPProjectIdSettingsIndexRoute: typeof ProjectPProjectIdSettingsIndexRoute
 }
 
@@ -1155,6 +1176,8 @@ const ProjectPProjectIdSettingsRouteChildren: ProjectPProjectIdSettingsRouteChil
       ProjectPProjectIdSettingsContextRoute,
     ProjectPProjectIdSettingsIntegrationsRoute:
       ProjectPProjectIdSettingsIntegrationsRoute,
+    ProjectPProjectIdSettingsPublishingRoute:
+      ProjectPProjectIdSettingsPublishingRoute,
     ProjectPProjectIdSettingsIndexRoute: ProjectPProjectIdSettingsIndexRoute,
   }
 
