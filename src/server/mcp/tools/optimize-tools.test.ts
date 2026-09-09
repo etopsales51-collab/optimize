@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { makeToolContext } from "./tool-test-support";
+import { makeToolContext, textContent } from "./tool-test-support";
 
 /**
  * What these tests defend: an external agent holding an API key cannot get a
@@ -235,6 +235,6 @@ describe("analyze_intent_overlap", () => {
       makeToolContext(),
     );
     expect(result.structuredContent?.pagesScanned).toBe(0);
-    expect(result.content[0].text).toContain("No completed site audit");
+    expect(textContent(result)).toContain("No completed site audit");
   });
 });
