@@ -6,6 +6,7 @@ import { hasOrgPermission } from "@/lib/org-permissions";
 import { consumeInvitationSendBudget } from "@/server/auth/invitation-send-limit";
 import { requireOrgPermission } from "@/server/auth/org-gate";
 import { AuthRepository } from "@/server/auth/repositories/AuthRepository";
+import { createPasswordSetupLink } from "@/server/features/auth/passwordSetupLink";
 import { sendHostedInvitationEmail } from "@/server/email/loops";
 import { AppError } from "@/server/lib/errors";
 import { requireAuthenticatedContext } from "@/serverFunctions/middleware";
@@ -153,4 +154,48 @@ export const sendTeamInvitation = createServerFn({ method: "POST" })
     }
 
     return { invitationId: invitation.id };
+  });
+
+
+/**
+ * Issue a link that lets a member choose a password, shown in the app instead
+ * of emailed.
+ *
+ * This is the only way onto this instance without Google. Password reset
+ * emails go through Loops, which this fork has no account for, so "Forgot
+ * password?" can never deliver anything — see passwordSetupLink.ts.
+ *
+ * Two access levels, deliberately different:
+ *  - Yourself: always allowed. Setting your own password is not an escalation,
+ *    and it is what unblocks someone who signed up with Google.
+ *  - Someone else: needs member:update (owner or admin). Minting a credential
+ *    for another account is the most sensitive thing this app can do, so it is
+ *    logged with both identities.
+ *
+ * Using the link revokes that user's existing sessions
+ * (revokeSessionsOnPasswordReset), which is why it is worth saying so in the UI.
+ */
+export const createMemberPasswordLink = createServerFn({ method: "POST" })
+  .middleware(requireAuthenticatedContext)
+  .validator(z.object({ email: z.string().email() }))
+  .handler(async ({ data, context }) => {
+    const isSelf =
+      data.email.trim().toLowerCase() === context.userEmail.trim().toLowerCase();
+
+    if (!isSelf) {
+      requireOrgPermission(context, { member: ["update"] });
+    }
+
+    const link = await createPasswordSetupLink({
+      organizationId: context.organizationId,
+      targetEmail: data.email,
+      baseUrl: getHostedBaseUrl(),
+    });
+
+    console.log(
+      `[auth] password set-up link issued by ${context.userEmail} for ${link.email}` +
+        (isSelf ? " (self)" : " (on behalf of another member)"),
+    );
+
+    return link;
   });

@@ -1,4 +1,4 @@
-import { Link2, Send, Trash2 } from "lucide-react";
+import { KeyRound, Link2, Send, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PortalMenu } from "@/client/components/PortalMenu";
 import { hasOrgPermission } from "@/lib/org-permissions";
@@ -59,14 +59,18 @@ export function MemberRow({
   canManageTeam,
   isOwner,
   isRemoving,
+  isCreatingPasswordLink,
   onRemove,
+  onCreatePasswordLink,
 }: {
   member: Member;
   isSelf: boolean;
   canManageTeam: boolean;
   isOwner: boolean;
   isRemoving: boolean;
+  isCreatingPasswordLink: boolean;
   onRemove: () => void;
+  onCreatePasswordLink: () => void;
 }) {
   const memberIsOwner = hasOrgPermission(member.role, {
     billing: ["manage"],
@@ -74,6 +78,12 @@ export function MemberRow({
   // Owners are protected server-side (only an owner can touch an owner; the
   // last owner can't be removed) — don't render controls that would just 403.
   const canRemove = canManageTeam && !isSelf && (!memberIsOwner || isOwner);
+  // Setting your own password is never an escalation; doing it for someone
+  // else needs the same standing that lets you manage the team. This is the
+  // only route in without Google, so it must stay reachable for yourself even
+  // when you cannot manage anyone else.
+  const canSetPassword = isSelf || canManageTeam;
+  const hasMenu = canRemove || canSetPassword;
 
   return (
     <tr className="hover">
@@ -95,31 +105,49 @@ export function MemberRow({
       </td>
       <td className="text-xs text-base-content/70">Active</td>
       <td>
-        {canRemove ? (
+        {hasMenu ? (
           <PortalMenu
             ariaLabel={`Actions for ${member.user.email}`}
-            menuClassName="w-52"
+            menuClassName="w-56"
           >
             {(close) => (
-              <li>
-                <button
-                  className="text-error"
-                  disabled={isRemoving}
-                  onClick={() => {
-                    close();
-                    if (
-                      window.confirm(
-                        `Remove ${member.user.email} from this organization? They lose access immediately.`,
-                      )
-                    ) {
-                      onRemove();
-                    }
-                  }}
-                >
-                  <Trash2 className="size-3.5" />
-                  Remove member
-                </button>
-              </li>
+              <>
+                {canSetPassword ? (
+                  <li>
+                    <button
+                      disabled={isCreatingPasswordLink}
+                      onClick={() => {
+                        close();
+                        onCreatePasswordLink();
+                      }}
+                    >
+                      <KeyRound className="size-3.5" />
+                      {isSelf ? "Set my password" : "Create password link"}
+                    </button>
+                  </li>
+                ) : null}
+                {canRemove ? (
+                  <li>
+                    <button
+                      className="text-error"
+                      disabled={isRemoving}
+                      onClick={() => {
+                        close();
+                        if (
+                          window.confirm(
+                            `Remove ${member.user.email} from this organization? They lose access immediately.`,
+                          )
+                        ) {
+                          onRemove();
+                        }
+                      }}
+                    >
+                      <Trash2 className="size-3.5" />
+                      Remove member
+                    </button>
+                  </li>
+                ) : null}
+              </>
             )}
           </PortalMenu>
         ) : null}

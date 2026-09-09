@@ -10,13 +10,24 @@ import { InvitationRow, MemberRow } from "@/client/features/team/TeamTableRows";
 import { captureClientEvent } from "@/client/lib/posthog";
 import { authClient, useSession } from "@/lib/auth-client";
 import { hasOrgPermission } from "@/lib/org-permissions";
-import { getTeam, sendTeamInvitation } from "@/serverFunctions/organization";
+import {
+  createMemberPasswordLink,
+  getTeam,
+  sendTeamInvitation,
+} from "@/serverFunctions/organization";
+import { PasswordLinkModal } from "@/client/features/team/PasswordLinkModal";
 
 // The Organization tab of account settings: who has access to the active org.
 export function TeamSettings() {
   const { data: session } = useSession();
   const queryClient = useQueryClient();
   const [isInviteOpen, setIsInviteOpen] = useState(false);
+  // Shown once, then dropped from memory. The link is a credential.
+  const [passwordLink, setPasswordLink] = useState<{
+    url: string;
+    email: string;
+    expiresAt: string;
+  } | null>(null);
 
   const orgContextQuery = useQuery(organizationContextQueryOptions());
 
@@ -42,6 +53,20 @@ export function TeamSettings() {
     },
     onError: (error: Error) => {
       toast.error(inviteErrorMessage(error));
+    },
+  });
+
+  // Issues a one-hour, single-use link that lets a member choose a password.
+  // Email delivery is impossible on this instance (no provider configured), so
+  // the link is handed over in the UI instead of sent.
+  const passwordLinkMutation = useMutation({
+    mutationFn: (email: string) => createMemberPasswordLink({ data: { email } }),
+    onSuccess: (link) => {
+      captureClientEvent("team:password_link_create");
+      setPasswordLink(link);
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Could not create a password link");
     },
   });
 
@@ -154,7 +179,11 @@ export function TeamSettings() {
                   canManageTeam={canManageTeam}
                   isOwner={isOwner}
                   isRemoving={removeMemberMutation.isPending}
+                  isCreatingPasswordLink={passwordLinkMutation.isPending}
                   onRemove={() => removeMemberMutation.mutate(member.id)}
+                  onCreatePasswordLink={() =>
+                    passwordLinkMutation.mutate(member.user.email)
+                  }
                 />
               ))}
               {pendingInvitations.map((invitation) => (
@@ -179,6 +208,13 @@ export function TeamSettings() {
         <InviteTeammateModal
           onClose={() => setIsInviteOpen(false)}
           onInvited={() => void refreshTeam()}
+        />
+      ) : null}
+
+      {passwordLink ? (
+        <PasswordLinkModal
+          link={passwordLink}
+          onClose={() => setPasswordLink(null)}
         />
       ) : null}
     </section>
