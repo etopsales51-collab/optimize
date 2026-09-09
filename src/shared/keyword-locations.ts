@@ -25,6 +25,11 @@
  * picker starts here instead of the United States.
  */
 export const DEFAULT_LOCATION_CODE = 2784;
+// The US, named. Upstream's default WAS the US, so several call sites said
+// DEFAULT_LOCATION_CODE when they meant "United States". Once the default
+// moved to the UAE those two ideas diverged; anything that means the US
+// must say so.
+export const US_LOCATION_CODE = 2840;
 
 /**
  * The markets this business actually trades in, pinned to the top of every

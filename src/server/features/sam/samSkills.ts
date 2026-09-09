@@ -42,7 +42,12 @@ const frontmatterSchema = z.looseObject({
 });
 
 function parseSkill(path: string, raw: string): SamSkill | null {
-  const match = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(raw);
+  // Normalize CRLF first. A Windows checkout with core.autocrlf rewrites
+  // SKILL.md line endings, and an LF-only frontmatter regex then reports the
+  // file as having no frontmatter at all. The Linux build never sees this;
+  // local tests do. Normalizing once also keeps the YAML and body clean.
+  const text = raw.replace(/\r\n/g, "\n");
+  const match = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(text);
   if (!match) throw new Error(`Skill has no frontmatter: ${path}`);
   const parsed = frontmatterSchema.safeParse(parseYaml(match[1]));
   if (!parsed.success) {

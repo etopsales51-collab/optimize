@@ -1,6 +1,7 @@
 import {
   Bookmark,
   Bot,
+  Wand2,
   ClipboardCheck,
   Globe,
   LayoutDashboard,
@@ -67,6 +68,11 @@ const projectNavItems = [
     label: "Prompt Explorer",
     icon: MessageSquare,
   },
+  {
+    to: "/p/$projectId/optimize" as const,
+    label: "Optimize",
+    icon: Wand2,
+  },
 ] as const;
 
 const aiNavItem = linkOptions({
@@ -92,7 +98,8 @@ function getProjectNavItems(projectId: string) {
 }
 
 // Grouped by scope: "My Site" is the project's own domain (tracked data),
-// "Research" is point-at-anything lookup tools.
+// "Research" is point-at-anything lookup tools, and "Content" is work waiting
+// on a person — recommendations an agent has proposed for review.
 export function getProjectNavGroups(projectId: string) {
   const all = getProjectNavItems(projectId);
   const byPath = (path: (typeof projectNavItems)[number]["to"]) =>
@@ -112,6 +119,10 @@ export function getProjectNavGroups(projectId: string) {
         byPath("/p/$projectId/brand-lookup"),
         byPath("/p/$projectId/prompt-explorer"),
       ],
+    },
+    {
+      label: "Content",
+      items: [byPath("/p/$projectId/optimize")],
     },
     {
       label: "My Site",

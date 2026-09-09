@@ -21,6 +21,10 @@ vi.mock(
 );
 vi.mock("@/server/lib/runtime-env", () => ({
   isHostedServerAuthMode: mocks.isHostedServerAuthMode,
+  // This fork keys billing off isBillingEnabled, not the auth mode. In
+  // these tests "hosted" has always meant "billing on", so one mock
+  // drives both and every existing assertion keeps its meaning.
+  isBillingEnabled: mocks.isHostedServerAuthMode,
 }));
 vi.mock("@/server/billing/subscription", () => ({
   customerHasPaidPlan: mocks.customerHasPaidPlan,

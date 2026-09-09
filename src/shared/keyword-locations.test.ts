@@ -146,20 +146,20 @@ describe("resolveLabsMarket", () => {
     ).toEqual({ locationCode: 2704, languageCode: "vi" });
   });
 
-  it("falls back to the US when the project market is Google-Ads-served", () => {
+  it("falls back to the default market (UAE) when the project market is Google-Ads-served", () => {
     // Iceland has no Labs data. The caller never picked it, so a Labs-only
     // tool must not fail on it.
     expect(
       resolveLabsMarket({}, { locationCode: 2352, languageCode: "en" }),
-    ).toEqual({ locationCode: 2840, languageCode: "en" });
+    ).toEqual({ locationCode: 2784, languageCode: "en" });
   });
 
-  it("falls back to the US when the project pair is not served", () => {
+  it("falls back to the default market (UAE) when the project pair is not served", () => {
     // Concurrent half-updates can leave a location/language pair Labs rejects;
     // sending it would spend credits on a task that always fails.
     expect(
       resolveLabsMarket({}, { locationCode: 2276, languageCode: "vi" }),
-    ).toEqual({ locationCode: 2840, languageCode: "en" });
+    ).toEqual({ locationCode: 2784, languageCode: "en" });
   });
 
   it("leaves an explicit location alone so the caller's assert can reject it", () => {

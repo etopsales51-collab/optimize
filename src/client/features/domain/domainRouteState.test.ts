@@ -60,14 +60,14 @@ describe("getDomainRouteState", () => {
     expect(state.sentLocationCode).toBe(2840);
   });
 
-  it("falls back to US for a Google-Ads-only project market", () => {
+  it("falls back to the default market (UAE) for a Google-Ads-only project market", () => {
     const state = getDomainRouteState(
       {},
       { locationCode: 2352, languageCode: "is" },
     );
 
-    expect(state.defaultLocationCode).toBe(2840);
-    expect(state.locationCode).toBe(2840);
+    expect(state.defaultLocationCode).toBe(2784);
+    expect(state.locationCode).toBe(2784);
     expect(state.sentLocationCode).toBeUndefined();
   });
 

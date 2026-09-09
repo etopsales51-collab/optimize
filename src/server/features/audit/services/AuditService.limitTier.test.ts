@@ -15,6 +15,10 @@ const {
 vi.mock("cloudflare:workers", () => ({ env: {} }));
 vi.mock("@/server/lib/runtime-env", () => ({
   isHostedServerAuthMode: isHostedMock,
+  // This fork keys billing off isBillingEnabled, not the auth mode. In
+  // these tests "hosted" has always meant "billing on", so one mock
+  // drives both and every existing assertion keeps its meaning.
+  isBillingEnabled: isHostedMock,
 }));
 vi.mock("@/server/billing/subscription", () => ({
   customerHasManagedAccess: hasManagedAccessMock,

@@ -27,7 +27,9 @@ import {
   pickRowFields,
   resolveBusinessIdentifier,
 } from "@/server/mcp/tools/local-seo-shared";
-import { resolveLabsMarket, resolveMarket } from "@/shared/keyword-locations";
+import { resolveLabsMarket, resolveMarket,
+  US_LOCATION_CODE,
+} from "@/shared/keyword-locations";
 import {
   assertLabsLocationCode,
   assertLanguageForLocation,
@@ -440,8 +442,11 @@ function resolveMarketSelector(
       project,
     );
   } else if (selector.market?.country != null) {
-    // The Zod enum already restricts explicit values to United States variants.
-    resolved = { locationCode: DEFAULT_LOCATION_CODE, languageCode: "en" };
+    // The Zod enum restricts explicit values to United States variants, so
+    // this branch means the US — not the deployment default. Upstream wrote
+    // DEFAULT_LOCATION_CODE here because for them the two coincided; this
+    // fork defaults to the UAE, and an explicit US request must stay US.
+    resolved = { locationCode: US_LOCATION_CODE, languageCode: "en" };
   } else {
     resolved = resolveLabsMarket({}, project);
   }

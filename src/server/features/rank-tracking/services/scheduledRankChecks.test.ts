@@ -66,6 +66,10 @@ vi.mock("@/server/billing/subscription", () => ({
 }));
 vi.mock("@/server/lib/runtime-env", () => ({
   isHostedServerAuthMode: mocks.isHostedServerAuthMode,
+  // This fork keys billing off isBillingEnabled, not the auth mode. In
+  // these tests "hosted" has always meant "billing on", so one mock
+  // drives both and every existing assertion keeps its meaning.
+  isBillingEnabled: mocks.isHostedServerAuthMode,
 }));
 
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- test double for the workflow binding
