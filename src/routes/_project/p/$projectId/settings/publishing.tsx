@@ -1,12 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Check, ShieldAlert } from "lucide-react";
+import { AlertTriangle, Check, ShieldAlert, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getStandardErrorMessage } from "@/client/lib/error-messages";
 import {
   getPublishSettings,
   savePublishSettings,
+  testPublishConnections,
 } from "@/serverFunctions/optimize";
 
 export const Route = createFileRoute("/_project/p/$projectId/settings/publishing")({
@@ -94,6 +95,13 @@ function PublishingSettingsPage() {
     },
     onError: (error) =>
       toast.error(getStandardErrorMessage(error, "Could not save these settings.")),
+  });
+
+  // Verifies what is stored, without the secret ever leaving the server.
+  const testMutation = useMutation({
+    mutationFn: () => testPublishConnections({ data: { projectId } }),
+    onError: (error) =>
+      toast.error(getStandardErrorMessage(error, "Could not test the connection.")),
   });
 
   if (isPending || !data) {
@@ -239,14 +247,55 @@ function PublishingSettingsPage() {
         ) : null}
       </section>
 
-      <button
-        type="button"
-        className="btn btn-primary"
-        disabled={saveMutation.isPending}
-        onClick={() => saveMutation.mutate()}
-      >
-        {saveMutation.isPending ? "Saving…" : "Save publishing settings"}
-      </button>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={saveMutation.isPending}
+          onClick={() => saveMutation.mutate()}
+        >
+          {saveMutation.isPending ? "Saving…" : "Save publishing settings"}
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={testMutation.isPending}
+          onClick={() => testMutation.mutate()}
+        >
+          {testMutation.isPending ? "Testing…" : "Test connection"}
+        </button>
+      </div>
+
+      {testMutation.data ? (
+        <ul className="space-y-2">
+          {testMutation.data.checks.map((check) => (
+            <li
+              key={check.channel}
+              className={`flex gap-2 rounded-lg border p-3 text-sm ${
+                check.ok
+                  ? "border-success/40 bg-success/5"
+                  : "border-base-300 bg-base-200/50"
+              }`}
+            >
+              {check.ok ? (
+                <Check className="mt-0.5 size-4 shrink-0 text-success" />
+              ) : (
+                <X className="mt-0.5 size-4 shrink-0 text-base-content/40" />
+              )}
+              <span>
+                <span className="font-medium">
+                  {check.channel === "woocommerce"
+                    ? "WooCommerce — products"
+                    : "WordPress — pages and posts"}
+                </span>
+                <span className="block text-base-content/70">
+                  {check.detail}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

@@ -13,6 +13,7 @@ import {
   previewPublish,
   publishApproved,
   saveSettings,
+  testConnections,
 } from "@/server/features/optimize/publish/publishService";
 import { requireOrgPermission } from "@/server/auth/org-gate";
 
@@ -193,6 +194,21 @@ export const savePublishSettings = createServerFn({ method: "POST" })
       publishingEnabled: data.publishingEnabled,
     });
     return getSettingsView(context.projectId);
+  });
+
+/**
+ * Verify the stored credentials against the live site, read-only.
+ *
+ * Exists so a credential can be checked without anyone pasting it into a chat
+ * or an email — the secret stays sealed server-side and only a verdict comes
+ * back. Same permission as saving them.
+ */
+export const testPublishConnections = createServerFn({ method: "POST" })
+  .middleware(requireProjectContext)
+  .validator(projectScopedSchema)
+  .handler(async ({ context }) => {
+    requireOrgPermission(context, { member: ["update"] });
+    return { checks: await testConnections(context.projectId) };
   });
 
 /** What publishing would change. Touches nothing. */

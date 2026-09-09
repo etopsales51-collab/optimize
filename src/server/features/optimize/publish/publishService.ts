@@ -219,6 +219,133 @@ async function loadCredentials(projectId: string) {
   } as const;
 }
 
+/**
+ * Check each stored credential against the live site, read-only.
+ *
+ * This exists so a credential can be verified without anyone pasting it into a
+ * chat, an email or a support thread. The secret stays sealed in the database;
+ * the server uses it, and only a verdict comes back.
+ *
+ * Both checks are GETs. Nothing here can modify the site.
+ */
+export type ConnectionCheck = {
+  channel: "woocommerce" | "wordpress";
+  ok: boolean;
+  detail: string;
+};
+
+export async function testConnections(
+  projectId: string,
+): Promise<ConnectionCheck[]> {
+  const row = await getRow(projectId);
+  const results: ConnectionCheck[] = [];
+
+  if (!row?.wordpressBaseUrl) {
+    return [
+      {
+        channel: "woocommerce",
+        ok: false,
+        detail: "No site URL saved yet.",
+      },
+    ];
+  }
+  const base = row.wordpressBaseUrl.replace(/\/+$/, "");
+
+  // WooCommerce — products.
+  const consumerSecret = await openSecret(row.wooConsumerSecretSealed);
+  if (!row.wooConsumerKey || !consumerSecret) {
+    results.push({
+      channel: "woocommerce",
+      ok: false,
+      detail: "Consumer key or secret not saved.",
+    });
+  } else {
+    try {
+      const auth = btoa(`${row.wooConsumerKey}:${consumerSecret}`);
+      const response = await fetch(`${base}/wp-json/wc/v3/products?per_page=1`, {
+        headers: { Authorization: `Basic ${auth}` },
+        signal: AbortSignal.timeout(15_000),
+      });
+      results.push({
+        channel: "woocommerce",
+        ok: response.ok,
+        detail: response.ok
+          ? "Connected — products readable."
+          : response.status === 401 || response.status === 403
+            ? "Rejected (401/403). Check the key and that it has Read/Write."
+            : `Store returned ${response.status}.`,
+      });
+    } catch {
+      results.push({
+        channel: "woocommerce",
+        ok: false,
+        detail: "Could not reach the store. Check the site URL.",
+      });
+    }
+  }
+
+  // WordPress — pages and posts. Optional until a recommendation targets one.
+  const appPassword = await openSecret(row.wpAppPasswordSealed);
+  if (!row.wpUsername || !appPassword) {
+    results.push({
+      channel: "wordpress",
+      ok: false,
+      detail: "Not set up yet — only needed for pages and blog posts.",
+    });
+    return results;
+  }
+
+  try {
+    const auth = btoa(`${row.wpUsername}:${appPassword}`);
+    // users/me reports who the credential authenticates AS and what it can do,
+    // which is what actually matters: an over-privileged account is the risk
+    // this credential was chosen to avoid.
+    const response = await fetch(`${base}/wp-json/wp/v2/users/me?context=edit`, {
+      headers: { Authorization: `Basic ${auth}` },
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    if (!response.ok) {
+      results.push({
+        channel: "wordpress",
+        ok: false,
+        detail:
+          response.status === 401
+            ? "Rejected (401). Check the username and application password."
+            : `WordPress returned ${response.status}.`,
+      });
+      return results;
+    }
+
+    const user = (await response.json().catch(() => ({}))) as {
+      slug?: string;
+      roles?: string[];
+      capabilities?: Record<string, boolean>;
+    };
+    const roles = user.roles?.join(", ") ?? "unknown";
+    const canEditPages = user.capabilities?.edit_others_pages === true;
+    // Flag an administrator: it works, but it is far more access than
+    // publishing SEO copy needs.
+    const isAdmin = user.roles?.includes("administrator") === true;
+
+    results.push({
+      channel: "wordpress",
+      ok: canEditPages,
+      detail: canEditPages
+        ? `Connected as ${user.slug ?? "user"} (${roles}).${isAdmin ? " This is an administrator — an Editor account would be safer." : ""}`
+        : `Connected as ${user.slug ?? "user"} (${roles}), but this account cannot edit other people's pages. Use an Editor.`,
+    });
+  } catch {
+    results.push({
+      channel: "wordpress",
+      ok: false,
+      detail: "Could not reach WordPress. Check the site URL.",
+    });
+  }
+
+  return results;
+}
+
 export type PublishOutcome = {
   ok: boolean;
   reason?: string;
