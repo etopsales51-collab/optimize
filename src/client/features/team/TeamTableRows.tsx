@@ -1,6 +1,30 @@
-import { Send, Trash2 } from "lucide-react";
+import { Link2, Send, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { PortalMenu } from "@/client/components/PortalMenu";
 import { hasOrgPermission } from "@/lib/org-permissions";
+
+/**
+ * Copy the invite link instead of mailing it.
+ *
+ * Upstream only ever mails an invitation, which needs a Loops account this
+ * instance deliberately doesn't have — so "Resend invitation" fails the same
+ * way every time and a saved, perfectly valid invitation looks broken. The
+ * link is the invitation; handing it over directly is the whole flow for a
+ * team this size.
+ */
+async function copyInviteLink(invitationId: string) {
+  const url = `${window.location.origin}/accept-invitation/${invitationId}`;
+  if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+    toast.error("Clipboard not available");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    toast.success("Invite link copied — send it to them directly");
+  } catch {
+    toast.error("Could not copy to clipboard");
+  }
+}
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "Owner",
@@ -143,6 +167,17 @@ export function InvitationRow({
           >
             {(close) => (
               <>
+                <li>
+                  <button
+                    onClick={() => {
+                      close();
+                      void copyInviteLink(invitation.id);
+                    }}
+                  >
+                    <Link2 className="size-3.5" />
+                    Copy invite link
+                  </button>
+                </li>
                 <li>
                   <button
                     disabled={isResending}
