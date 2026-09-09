@@ -2,6 +2,7 @@ import { getDatabaseProvider } from "./provider";
 import * as sqliteApp from "./app.schema";
 import * as sqliteProjectContext from "./project-context.schema";
 import * as sqliteAudit from "./audit.schema";
+import * as sqliteOptimize from "./optimize.schema";
 import * as sqliteSam from "./sam.schema";
 import * as sqliteAuth from "./better-auth-schema";
 import * as sqliteBilling from "./billing.schema";
@@ -11,6 +12,7 @@ import * as sqliteTelemetry from "./telemetry.schema";
 import * as pgApp from "./pg/app.schema";
 import * as pgProjectContext from "./pg/project-context.schema";
 import * as pgAudit from "./pg/audit.schema";
+import * as pgOptimize from "./pg/optimize.schema";
 import * as pgSam from "./pg/sam.schema";
 import * as pgAuth from "./pg/better-auth-schema";
 import * as pgBilling from "./pg/billing.schema";
@@ -31,6 +33,7 @@ import * as pgTelemetry from "./pg/telemetry.schema";
 type AppSchema = typeof sqliteApp &
   typeof sqliteProjectContext &
   typeof sqliteAudit &
+  typeof sqliteOptimize &
   typeof sqliteSam &
   typeof sqliteAuth &
   typeof sqliteBilling &
@@ -44,6 +47,7 @@ const runtimeSchema =
         ...pgApp,
         ...pgProjectContext,
         ...pgAudit,
+        ...pgOptimize,
         ...pgSam,
         ...pgAuth,
         ...pgBilling,
@@ -55,6 +59,7 @@ const runtimeSchema =
         ...sqliteApp,
         ...sqliteProjectContext,
         ...sqliteAudit,
+        ...sqliteOptimize,
         ...sqliteSam,
         ...sqliteAuth,
         ...sqliteBilling,
@@ -88,6 +93,9 @@ export const {
   auditPages,
   auditIssues,
   auditLighthouseResults,
+  optimizeRecommendations,
+  optimizeComments,
+  optimizeJobEvents,
   samSessions,
   user,
   session,
