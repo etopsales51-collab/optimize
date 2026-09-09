@@ -8,6 +8,13 @@ import {
   OPTIMIZE_TYPES,
 } from "@/shared/optimize";
 import { requireProjectContext } from "@/serverFunctions/middleware";
+import {
+  getSettingsView,
+  previewPublish,
+  publishApproved,
+  saveSettings,
+} from "@/server/features/optimize/publish/publishService";
+import { requireOrgPermission } from "@/server/auth/org-gate";
 
 /**
  * Staff-facing Optimize surface. Everything here runs as the signed-in user
@@ -125,3 +132,70 @@ export const dismissOptimizeRecommendation = createServerFn({ method: "POST" })
     });
     return { ok: true };
   });
+
+// ---------------------------------------------------------------------------
+// Publishing
+// ---------------------------------------------------------------------------
+
+export const getPublishSettings = createServerFn({ method: "POST" })
+  .middleware(requireProjectContext)
+  .validator(projectScopedSchema)
+  .handler(async ({ context }) => getSettingsView(context.projectId));
+
+/**
+ * Only an org admin or owner may set publishing credentials — this is the
+ * control that lets the app write to a live store, so it sits behind the same
+ * standing as managing the team. The password is write-only: an empty string
+ * leaves the stored one untouched, and it is never read back to the client.
+ */
+export const savePublishSettings = createServerFn({ method: "POST" })
+  .middleware(requireProjectContext)
+  .validator(
+    projectScopedSchema.extend({
+      wordpressBaseUrl: z.string().url().or(z.literal("")).optional(),
+      wpUsername: z.string().max(200).optional(),
+      wpAppPassword: z.string().max(500).optional(),
+      pagesChannel: z.enum(["novamira", "wp_rest", "manual"]).optional(),
+      productsChannel: z.enum(["novamira", "wp_rest", "manual"]).optional(),
+      publishingEnabled: z.boolean().optional(),
+    }),
+  )
+  .handler(async ({ data, context }) => {
+    requireOrgPermission(context, { member: ["update"] });
+    await saveSettings({
+      projectId: context.projectId,
+      wordpressBaseUrl: data.wordpressBaseUrl === "" ? null : data.wordpressBaseUrl,
+      wpUsername: data.wpUsername,
+      wpAppPassword: data.wpAppPassword,
+      pagesChannel: data.pagesChannel,
+      productsChannel: data.productsChannel,
+      publishingEnabled: data.publishingEnabled,
+    });
+    return getSettingsView(context.projectId);
+  });
+
+/** What publishing would change. Touches nothing. */
+export const previewOptimizePublish = createServerFn({ method: "POST" })
+  .middleware(requireProjectContext)
+  .validator(recommendationScopedSchema)
+  .handler(async ({ data, context }) =>
+    previewPublish(data.id, context.projectId),
+  );
+
+/**
+ * Publish an approved recommendation to the live site.
+ *
+ * Separate from approve on purpose: approving records the human decision, and
+ * this is the deliberate second action that writes. The service re-checks that
+ * the item is `approved` regardless of who calls this.
+ */
+export const publishOptimizeRecommendation = createServerFn({ method: "POST" })
+  .middleware(requireProjectContext)
+  .validator(recommendationScopedSchema)
+  .handler(async ({ data, context }) =>
+    publishApproved({
+      recommendationId: data.id,
+      projectId: context.projectId,
+      actorKey: `user:${context.userId}`,
+    }),
+  );
