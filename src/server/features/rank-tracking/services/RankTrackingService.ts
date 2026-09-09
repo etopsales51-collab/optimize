@@ -9,7 +9,7 @@ import {
 } from "@/server/lib/dataforseo";
 import { RankTrackingRepository } from "@/server/features/rank-tracking/repositories/RankTrackingRepository";
 import { AppError } from "@/server/lib/errors";
-import { isHostedServerAuthMode } from "@/server/lib/runtime-env";
+import { isBillingEnabled } from "@/server/lib/runtime-env";
 import type {
   RankTrackingConfig,
   RankCheckTriggerResult,
@@ -318,7 +318,7 @@ async function getTracker(configId: string, projectId: string) {
 }
 
 async function requireRankCheckAccess(organizationId: string) {
-  if (!(await isHostedServerAuthMode())) return;
+  if (!(await isBillingEnabled())) return;
   if (await customerHasPaidPlan(organizationId)) return;
   throw new AppError(
     "PAYMENT_REQUIRED",

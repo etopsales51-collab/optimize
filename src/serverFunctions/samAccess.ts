@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import {
   getOptionalEnvValue,
-  isHostedServerAuthMode,
+  isBillingEnabled,
 } from "@/server/lib/runtime-env";
 import { requireProjectContext } from "@/serverFunctions/middleware";
 
@@ -23,7 +23,10 @@ export const getSamAccessSetupStatus = createServerFn({ method: "GET" })
   .middleware(requireProjectContext)
   .validator(projectScopedSchema)
   .handler(async (): Promise<SamAccessStatus> => {
-    if (await isHostedServerAuthMode()) {
+    // Upstream's SaaS supplies the model, so hosted mode reports SAM ready.
+    // This instance uses hosted mode only for the login and buys no AI credits,
+    // so fall through to the real check: SAM is available iff a key is set.
+    if (await isBillingEnabled()) {
       return { enabled: true, errorMessage: null };
     }
 

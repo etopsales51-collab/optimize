@@ -5,7 +5,6 @@ import { useState, type ComponentType } from "react";
 import {
   ArrowLeftRight,
   Check,
-  CreditCard,
   LogOut,
   Settings,
   User,
@@ -22,7 +21,6 @@ import { ThemePreferenceMenuItems } from "@/client/components/ThemePreferenceMen
 import { closeDropdown } from "@/client/lib/dropdown";
 import { signOutAndRedirect, useSession } from "@/lib/auth-client";
 import { isHostedClientAuthMode } from "@/lib/auth-mode";
-import { BILLING_ROUTE } from "@/shared/billing";
 
 interface SidebarProps {
   projectId: string | null;
@@ -232,14 +230,7 @@ function SidebarFooter({ onNavigate }: { onNavigate?: () => void }) {
                 Settings
               </Link>
             </li>
-            {isHostedMode ? (
-              <li>
-                <Link to={BILLING_ROUTE} onClick={closeMenu}>
-                  <CreditCard className="h-4 w-4" />
-                  Billing
-                </Link>
-              </li>
-            ) : null}
+            {/* No Billing entry: this fork charges nobody. See BILLING_ENABLED. */}
             <ThemePreferenceMenuItems />
             {isHostedMode ? (
               <>

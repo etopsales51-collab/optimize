@@ -1,3 +1,13 @@
+/**
+ * Whether this deployment sells access. Always false.
+ *
+ * This fork runs on its own DataForSEO and Google credentials and charges
+ * nobody, so no plan gate, price markup or upgrade prompt should ever appear.
+ * The server-side twin is isBillingEnabled() in server/lib/runtime-env.ts;
+ * both are constants so billing cannot switch itself back on via an env var.
+ */
+export const BILLING_ENABLED = false;
+
 export const BILLING_ROUTE = "/billing";
 export const SUBSCRIBE_ROUTE = "/subscribe";
 

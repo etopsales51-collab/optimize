@@ -1,7 +1,7 @@
+import { BILLING_ENABLED } from "@/shared/billing";
 import type { ReactNode } from "react";
 import { useCustomer } from "autumn-js/react";
 import { useSession } from "@/lib/auth-client";
-import { isHostedClientAuthMode } from "@/lib/auth-mode";
 import { getCustomerPlanStatus } from "@/client/features/billing/plan-detection";
 
 export type HostedPlanGateState = {
@@ -19,7 +19,8 @@ export function HostedPlanGate({
 }: {
   children: (state: HostedPlanGateState) => ReactNode;
 }) {
-  if (!isHostedClientAuthMode()) {
+  // Billing is off for this fork, so every viewer gets the ungated state.
+  if (!BILLING_ENABLED) {
     return children(SELF_HOSTED_PLAN_GATE);
   }
 

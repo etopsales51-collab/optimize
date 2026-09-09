@@ -24,7 +24,7 @@ import {
   resolveStartUrlRedirects,
 } from "@/server/lib/audit/url-policy";
 import { reconcileRunningAudit } from "@/server/features/audit/services/auditReconciler";
-import { isHostedServerAuthMode } from "@/server/lib/runtime-env";
+import { isBillingEnabled } from "@/server/lib/runtime-env";
 
 // Plan-tier limits are the abuse bound in hosted mode: free accounts get small
 // audits with a bounded burst, paid keeps the full limits, and customers with
@@ -32,7 +32,7 @@ import { isHostedServerAuthMode } from "@/server/lib/runtime-env";
 async function resolveAuditLimitTier(
   customer: BillingCustomerContext,
 ): Promise<AuditLimitTier> {
-  if (!(await isHostedServerAuthMode())) return "self_hosted";
+  if (!(await isBillingEnabled())) return "self_hosted";
   // An org minted outside a billing path (better-auth hooks, MCP auth) has no
   // Autumn customer yet, and `check` 404s instead of reporting no access — a
   // brand-new MCP user's first audit failed with a raw billing error.

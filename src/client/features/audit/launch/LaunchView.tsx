@@ -1,10 +1,10 @@
+import { BILLING_ENABLED } from "@/shared/billing";
 import { useCustomer } from "autumn-js/react";
 import { AuditHistorySection } from "@/client/features/audit/launch/AuditHistorySection";
 import { LaunchFormCard } from "@/client/features/audit/launch/LaunchFormCard";
 import { useLaunchController } from "@/client/features/audit/launch/useLaunchController";
 import { getCustomerPlanStatus } from "@/client/features/billing/plan-detection";
 import { useSession } from "@/lib/auth-client";
-import { isHostedClientAuthMode } from "@/lib/auth-mode";
 
 type LaunchViewProps = {
   projectId: string;
@@ -12,9 +12,9 @@ type LaunchViewProps = {
 };
 
 export function LaunchView(props: LaunchViewProps) {
-  // Self-hosted has no Autumn customer and resolves to the paid tier on the
-  // server, so only hosted mode needs to look up the plan.
-  if (!isHostedClientAuthMode()) {
+  // No billing here, so the server always resolves the full tier — never
+  // look up a plan, and never render the free-plan ceiling.
+  if (!BILLING_ENABLED) {
     return <LaunchContent {...props} isFreePlan={false} />;
   }
 

@@ -3,7 +3,7 @@ import { getBrandLookup } from "@/server/features/ai-search/services/brandLookup
 import { explorePrompt as runExplorePrompt } from "@/server/features/ai-search/services/promptExplorer";
 import { customerHasPaidPlan } from "@/server/billing/subscription";
 import { AppError } from "@/server/lib/errors";
-import { isHostedServerAuthMode } from "@/server/lib/runtime-env";
+import { isBillingEnabled } from "@/server/lib/runtime-env";
 import { requireProjectContext } from "@/serverFunctions/middleware";
 import {
   brandLookupInputSchema,
@@ -16,7 +16,7 @@ import {
  * deployments pay DataForSEO directly and aren't gated.
  */
 async function assertPaidPlan(organizationId: string) {
-  if (!(await isHostedServerAuthMode())) return;
+  if (!(await isBillingEnabled())) return;
   if (await customerHasPaidPlan(organizationId)) return;
   throw new AppError(
     "PAYMENT_REQUIRED",

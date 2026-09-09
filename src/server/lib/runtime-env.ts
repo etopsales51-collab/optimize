@@ -41,6 +41,29 @@ export async function isHostedServerAuthMode(): Promise<boolean> {
   return isHostedAuthMode(await getOptionalEnvValue("AUTH_MODE"));
 }
 
+/**
+ * Whether to meter and gate on the commercial billing provider. Always false.
+ *
+ * This is a fork running on its own DataForSEO and Google credentials. It sells
+ * nothing and has no Autumn account, so no request here is ever billable.
+ *
+ * Upstream reads AUTH_MODE for this, because for them "hosted" means the paid
+ * SaaS. Here it means only Better Auth + Google sign-in. Conflating the two
+ * killed every metered path — site audits, rank checks, AI Visibility and *all*
+ * DataForSEO research — with "Missing required environment variable:
+ * AUTUMN_SECRET_KEY", because the app was asking a payment provider we have no
+ * account with whether we were allowed to run our own API key.
+ *
+ * Deliberately a constant rather than a check on AUTUMN_SECRET_KEY: billing
+ * must not be one stray environment variable away from switching itself on.
+ * Every billing call site routes through here, so this single line is the
+ * guarantee. The gates and Autumn client stay in the tree untouched so upstream
+ * merges keep applying.
+ */
+export async function isBillingEnabled(): Promise<boolean> {
+  return false;
+}
+
 async function getWorkersEnv(): Promise<Record<string, unknown> | null> {
   if (!workersEnvPromise) {
     workersEnvPromise = loadWorkersEnv();
