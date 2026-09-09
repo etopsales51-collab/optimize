@@ -173,8 +173,26 @@ export const savePublishSettings = createServerFn({ method: "POST" })
       wordpressBaseUrl: z.string().url().or(z.literal("")).optional(),
       wpUsername: z.string().max(200).optional(),
       wpAppPassword: z.string().max(500).optional(),
-      wooConsumerKey: z.string().max(200).optional(),
-      wooConsumerSecret: z.string().max(200).optional(),
+      // WooCommerce always issues these with ck_/cs_ prefixes. Checking that
+      // catches the failure this form actually produces: a browser autofilling
+      // an email address into the key field, which has happened twice and
+      // otherwise only surfaces as a 401 on a live store.
+      wooConsumerKey: z
+        .string()
+        .max(200)
+        .refine(
+          (value) => value === "" || value.startsWith("ck_"),
+          "A WooCommerce consumer key starts with 'ck_'. This looks like an email or username — check the field was not autofilled by your browser.",
+        )
+        .optional(),
+      wooConsumerSecret: z
+        .string()
+        .max(200)
+        .refine(
+          (value) => value === "" || value.startsWith("cs_"),
+          "A WooCommerce consumer secret starts with 'cs_'. Check the field was not autofilled by your browser.",
+        )
+        .optional(),
       pagesChannel: z.enum(["novamira", "wp_rest", "manual"]).optional(),
       productsChannel: z.enum(["novamira", "wp_rest", "manual"]).optional(),
       publishingEnabled: z.boolean().optional(),

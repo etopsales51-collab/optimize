@@ -120,6 +120,14 @@ function PublishingSettingsPage() {
           without a person approving it first, and nothing at all is published
           while the switch below is off.
         </p>
+        <p className="mt-2 text-xs text-base-content/55">
+          These credentials belong to this project alone. Each project stores
+          its own and never reads another&rsquo;s — the status beside each
+          field below is what is saved for <strong>this</strong> project. If a
+          field looks pre-filled but the status says &ldquo;Not set&rdquo;,
+          that is your browser autofilling, not a saved value; clear it before
+          saving.
+        </p>
       </div>
 
       <section className="space-y-3 rounded-lg border border-base-300 p-4">
@@ -131,6 +139,8 @@ function PublishingSettingsPage() {
             </span>
             <input
               type="url"
+              name="di-site-url"
+              autoComplete="off"
               value={baseUrl}
               onChange={(event) => setBaseUrl(event.target.value)}
               placeholder="https://wacomme.ae"
@@ -154,6 +164,8 @@ function PublishingSettingsPage() {
         <label className="block">
           <span className="text-xs text-base-content/60">Consumer key</span>
           <input
+            name="di-woo-key"
+            autoComplete="off"
             value={wooKey}
             onChange={(event) => setWooKey(event.target.value)}
             placeholder="ck_…"
@@ -166,7 +178,8 @@ function PublishingSettingsPage() {
           </span>
           <input
             type="password"
-            autoComplete="off"
+            name="di-woo-secret"
+            autoComplete="new-password"
             value={wooSecret}
             onChange={(event) => setWooSecret(event.target.value)}
             placeholder="cs_…"
@@ -192,6 +205,8 @@ function PublishingSettingsPage() {
         <label className="block">
           <span className="text-xs text-base-content/60">Username</span>
           <input
+            name="di-wp-username"
+            autoComplete="off"
             value={wpUsername}
             onChange={(event) => setWpUsername(event.target.value)}
             placeholder="deepinsights-bot"
@@ -204,7 +219,8 @@ function PublishingSettingsPage() {
           </span>
           <input
             type="password"
-            autoComplete="off"
+            name="di-wp-app-password"
+            autoComplete="new-password"
             value={wpAppPassword}
             onChange={(event) => setWpAppPassword(event.target.value)}
             placeholder="xxxx xxxx xxxx xxxx xxxx xxxx"
