@@ -5,7 +5,10 @@ import {
 } from "@/shared/billing";
 import { mcpResponse } from "@/server/mcp/formatters";
 import { type ToolContext } from "@/server/mcp/context";
-import { isHostedServerAuthMode } from "@/server/lib/runtime-env";
+import {
+  isBillingEnabled,
+  isHostedServerAuthMode,
+} from "@/server/lib/runtime-env";
 import { optionalMetaOutputSchema } from "@/server/mcp/output-schemas";
 import { z } from "zod";
 
@@ -41,8 +44,13 @@ export const whoamiTool = {
   handler: async (_args: Record<string, never>, context: ToolContext) => {
     const auth = context.auth;
     const isHosted = await isHostedServerAuthMode();
+    // Credits come from the billing provider. This fork has billing switched
+    // off, so reading the balance returns 0 and every agent concludes its
+    // next paid call will fail, when in fact nothing here is metered. Report
+    // null ("not metered") instead of a number that means the wrong thing.
+    const metered = await isBillingEnabled();
     let creditsRemaining: number | null = null;
-    if (isHosted) {
+    if (metered) {
       const [base, topup] = await Promise.all([
         checkBalance(AUTUMN_SEO_DATA_BALANCE_FEATURE_ID, auth.organizationId),
         checkBalance(
@@ -59,7 +67,9 @@ export const whoamiTool = {
     ];
     if (isHosted) {
       lines.push(
-        `Credits remaining: ${creditsRemaining != null ? creditsRemaining.toLocaleString() : "unknown"}`,
+        metered
+          ? `Credits remaining: ${creditsRemaining != null ? creditsRemaining.toLocaleString() : "unknown"}`
+          : "Credits: not metered on this instance (research tools are not credit-limited here)",
       );
     }
     return mcpResponse({
