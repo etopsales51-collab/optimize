@@ -71,7 +71,7 @@ const FINISH_STOP = { unified: "stop", raw: undefined } as const;
 export function staticAssistantModel(text: string): LanguageModelV3 {
   return {
     specificationVersion: "v3",
-    provider: "openseo",
+    provider: "deep-insights",
     modelId: "static-assistant",
     supportedUrls: {},
     doGenerate: async () => ({
