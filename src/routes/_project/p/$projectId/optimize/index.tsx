@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { MessageSquare, Wand2 } from "lucide-react";
 import { useState } from "react";
@@ -14,7 +14,7 @@ import {
   type OptimizeStatus,
 } from "@/shared/optimize";
 
-export const Route = createFileRoute("/_project/p/$projectId/optimize")({
+export const Route = createFileRoute("/_project/p/$projectId/optimize/")({
   component: OptimizePage,
 });
 
@@ -94,10 +94,12 @@ function OptimizePage() {
         ) : (
           <ul className="space-y-2">
             {items.map((item) => (
-              <li
-                key={item.id}
-                className="rounded-lg border border-base-300 bg-base-100 p-4"
-              >
+              <li key={item.id}>
+                <Link
+                  to="/p/$projectId/optimize/$recommendationId"
+                  params={{ projectId, recommendationId: item.id }}
+                  className="block rounded-lg border border-base-300 bg-base-100 p-4 transition-colors hover:border-base-content/20"
+                >
                 <div className="flex flex-wrap items-center gap-2">
                   <PriorityLabel priority={item.priority} />
                   <StatusBadge status={item.status} />
@@ -117,9 +119,10 @@ function OptimizePage() {
                   {item.targetUrl}
                 </p>
 
-                <div className="mt-2">
-                  <SourceChips evidence={item.evidence} />
-                </div>
+                  <div className="mt-2">
+                    <SourceChips evidence={item.evidence} />
+                  </div>
+                </Link>
               </li>
             ))}
           </ul>
