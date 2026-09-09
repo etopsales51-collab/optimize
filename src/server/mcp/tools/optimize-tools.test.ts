@@ -238,3 +238,18 @@ describe("analyze_intent_overlap", () => {
     expect(textContent(result)).toContain("No completed site audit");
   });
 });
+
+describe("review link handed back to the agent", () => {
+  it("deep-links to the recommendation, not the list", async () => {
+    const result = await createOptimizeRecommendationTool.handler(
+      baseArgs,
+      makeToolContext(),
+    );
+    // Staff click this URL out of the agent's reply. An ?id= query would land
+    // on the list, which ignores it, and read as a broken link.
+    expect(result.structuredContent?.reviewUrl).toContain(
+      "/p/proj_1/optimize/rec_1",
+    );
+    expect(result.structuredContent?.reviewUrl).not.toContain("?id=");
+  });
+});

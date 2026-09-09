@@ -63,8 +63,11 @@ function agentActor(
   return { type: "agent" as const, id, label: args.agentLabel ?? id };
 }
 
+// Deep link straight to the item. This is the URL agents hand back to staff,
+// so it must open the recommendation itself — an ?id= query lands on the list,
+// which ignores it and looks like the link is broken.
 const optimizePath = (projectId: string, id?: string) =>
-  id ? `/p/${projectId}/optimize?id=${id}` : `/p/${projectId}/optimize`;
+  id ? `/p/${projectId}/optimize/${id}` : `/p/${projectId}/optimize`;
 
 const recommendationSummarySchema = z.object({
   id: z.string(),
