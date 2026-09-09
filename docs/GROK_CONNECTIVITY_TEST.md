@@ -164,22 +164,53 @@ part of this run.
 
 ---
 
-## 4. What is NOT available yet (phase 2)
+## 4. Write tools — LIVE
 
-Grok cannot post into Optimize today. These MCP write tools are the next build
-and will accept the JSON above unchanged:
+Grok can now post into Optimize. Nine tools, all credit-free:
 
-- `create_optimize_recommendation` — posts a recommendation (pending review)
-- `update_optimize_recommendation` — revises after staff request changes
-- `add_optimize_comment` / `list_optimize_comments` — the in-UI thread
-- `list_optimize_recommendations` / `get_optimize_recommendation`
-- `analyze_intent_overlap` — server-side cannibalization scan over the crawl
-- `request_module_access` / `list_accessible_modules`
-- Inbound signed webhook (alternative to MCP for posting)
+| Tool | What it does |
+|---|---|
+| `analyze_intent_overlap` | Scans the latest audit's pages for a page that already owns the intent. Returns `optimize_existing`, `merge_pages` or `new_page_allowed`, plus a ready-to-paste `cannibalizationCheck`. |
+| `create_optimize_recommendation` | Posts a proposal for staff review. |
+| `update_optimize_recommendation` | Revises after staff request changes; returns it to the queue. |
+| `list_optimize_recommendations` | Open items — call first to find `changes_requested` work. |
+| `get_optimize_recommendation` | Full detail plus the comment thread. |
+| `add_optimize_comment` / `list_optimize_comments` | The in-UI conversation, both directions. |
+| `list_accessible_modules` / `request_module_access` | Declare what a routine will read; logged with agent identity. |
 
-Until then the recommendation comes back to Walid as text. Once phase 2
-ships, the same prompt gains one final step: call
-`create_optimize_recommendation` with the JSON.
+Two things the server enforces, so the agent does not have to be trusted:
+
+1. **No tool can approve.** Nothing an agent posts reaches a live site until a
+   person clicks Approve in Deep Insights.
+2. **No competing pages.** A `new_page_brief` is rejected unless the
+   cannibalization check is clear with no overlapping URLs. The rejection names
+   the alternative — improve the existing page, or merge.
+
+`analyze_intent_overlap` folds near-duplicate phrasings to one intent, so
+"mail management system" and "mail management solution" are recognised as the
+same intent and return `merge_pages`, keeping the better-linked page.
+
+### Standing routine prompt
+
+```
+Connect to https://seo.deepinsights.space/mcp with your oseo_ key.
+
+1. request_module_access for the modules your pass will read.
+2. list_optimize_recommendations — handle anything in changes_requested
+   FIRST: get_optimize_recommendation, read the comments, then
+   update_optimize_recommendation with a revisionNote saying what you changed.
+3. For new work: read audit + GSC + rank + SERP as in section 3.
+   Resolve any 301 audit row via its redirectUrl — the 301 is the redirect
+   SOURCE, the real page is the 200 row it points to.
+4. Before every proposal call analyze_intent_overlap with your primary query.
+   Follow its recommendation; paste its cannibalizationCheck verbatim.
+5. create_optimize_recommendation with the JSON from section 3.
+6. Never approve. Never publish. Staff approve in the UI.
+
+Prefer GSC queries + get_keyword_metrics over research_keywords for branded
+or software terms — blind expansion returns noise. Never propose link building
+from the backlink profile; on-page and internal linking only.
+```
 
 ---
 
