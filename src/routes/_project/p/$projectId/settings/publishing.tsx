@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { getStandardErrorMessage } from "@/client/lib/error-messages";
 import {
   getPublishSettings,
+  inspectPublishProduct,
   savePublishSettings,
   testPublishConnections,
 } from "@/serverFunctions/optimize";
@@ -102,6 +103,16 @@ function PublishingSettingsPage() {
     mutationFn: () => testPublishConnections({ data: { projectId } }),
     onError: (error) =>
       toast.error(getStandardErrorMessage(error, "Could not test the connection.")),
+  });
+
+  // Read-only: shows what one product stores, so the field a template reads
+  // for its datasheet can be found without anyone handling the credential.
+  const [inspectUrl, setInspectUrl] = useState("");
+  const inspectMutation = useMutation({
+    mutationFn: () =>
+      inspectPublishProduct({ data: { projectId, productUrl: inspectUrl.trim() } }),
+    onError: (error) =>
+      toast.error(getStandardErrorMessage(error, "Could not inspect that product.")),
   });
 
   if (isPending || !data) {
@@ -312,6 +323,72 @@ function PublishingSettingsPage() {
           ))}
         </ul>
       ) : null}
+
+      <section className="space-y-3 rounded-lg border border-base-300 p-4">
+        <h3 className="text-sm font-semibold">Inspect a product</h3>
+        <p className="text-xs text-base-content/60">
+          Read-only. Shows the fields WooCommerce stores for one product, so we
+          can see which one this site&rsquo;s template reads for its datasheet
+          before publishing learns to write it. Nothing is changed.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <input
+            type="url"
+            name="di-inspect-url"
+            autoComplete="off"
+            value={inspectUrl}
+            onChange={(event) => setInspectUrl(event.target.value)}
+            placeholder="https://wacomme.ae/product/wacom-pl-1600-pen-display/"
+            className="input input-bordered input-sm min-w-0 flex-1"
+          />
+          <button
+            type="button"
+            className="btn btn-sm"
+            disabled={!inspectUrl.trim() || inspectMutation.isPending}
+            onClick={() => inspectMutation.mutate()}
+          >
+            {inspectMutation.isPending ? "Reading…" : "Show fields"}
+          </button>
+        </div>
+
+        {inspectMutation.data ? (
+          inspectMutation.data.ok ? (
+            <div className="space-y-2 text-sm">
+              <p>
+                <span className="font-medium">{inspectMutation.data.name}</span>
+                <span className="text-base-content/60">
+                  {" "}
+                  · id {inspectMutation.data.productId} ·{" "}
+                  {inspectMutation.data.status} ·{" "}
+                  {inspectMutation.data.categories.join(", ") || "no category"}
+                </span>
+              </p>
+              <div className="overflow-x-auto">
+                <table className="table table-xs">
+                  <thead>
+                    <tr>
+                      <th>Meta key</th>
+                      <th>Value (truncated)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inspectMutation.data.metaKeys.map((row) => (
+                      <tr key={row.key}>
+                        <td className="font-mono text-xs">{row.key}</td>
+                        <td className="max-w-md truncate font-mono text-xs text-base-content/70">
+                          {row.value}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-warning">{inspectMutation.data.reason}</p>
+          )
+        ) : null}
+      </section>
     </div>
   );
 }

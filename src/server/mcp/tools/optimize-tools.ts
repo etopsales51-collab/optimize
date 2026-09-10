@@ -102,7 +102,7 @@ const createInputSchema = {
     .optional()
     .describe("Why now. Typed pointers into audit / GSC / rank / backlink / competitor data. Staff see these as source chips and links."),
   proposal: optimizeProposalSchema.describe(
-    "The machine-executable change set: before/after for title, metaDescription, h1; sections to add/rewrite/remove; internal links. 'after' copy may use simple HTML (p, h2, h3, ul, li, strong, a). Set 'brand' to the manufacturer (ViRDi, UBio, Nitgen…) so the product is filed under its brand category — it is otherwise guessed from the h1, and a wrong guess files it in the wrong place.",
+    "The machine-executable change set: before/after for title, metaDescription, h1; sections to add/rewrite/remove; internal links. 'after' copy may use simple HTML (p, h2, h3, ul, li, table, strong, a). COPY RULES — title, metaDescription, h1 and sections[].after are CUSTOMER-READY and go live verbatim: no verification asides, no 'verify before publish', no 'portfolio row', no 'no images in this brief', no names, no TODOs. Spec table cells are bare values ('X', 'IP65', '20,000'), never a value plus an essay. Write lean product facts, not manufacturer marketing sentences. Everything you are unsure about goes in `notes`, which staff read and which is never published; process language found in publishable fields is stripped server-side and reported back to you. Set 'brand' to the manufacturer (ViRDi, UBio, Nitgen…) so the product is filed under its brand category — it is otherwise guessed from the h1. Put the manufacturer catalog or datasheet PDF in 'attachments' ({kind: 'catalog'|'datasheet', label, url}) rather than in notes or a section, so staff get a card with Open and Copy; images are rejected there.",
   ),
   cannibalizationCheck: cannibalizationCheckSchema.describe(
     "REQUIRED. Result of your overlap scan. Paste analyze_intent_overlap's cannibalizationCheck verbatim, or supply your own with the URLs you compared.",
@@ -122,6 +122,22 @@ const createInputSchema = {
 
 type CreateArgs = z.infer<z.ZodObject<typeof createInputSchema>>;
 
+const copyRemovedOutputSchema = z
+  .array(z.object({ field: z.string(), text: z.string() }))
+  .optional()
+  .describe("Process language that was stripped from publishable fields before storage. Move any verification detail here into `proposal.notes`.");
+
+/** Tell the agent what was taken out, so it stops putting it there. */
+function describeRemovals(removals: Array<{ field: string; text: string }>): string {
+  if (removals.length === 0) return "";
+  const shown = removals
+    .slice(0, 5)
+    .map((removal) => `  - ${removal.field}: "${removal.text}"`)
+    .join("\n");
+  const more = removals.length > 5 ? `\n  …and ${removals.length - 5} more.` : "";
+  return `Stripped ${removals.length} agent note(s) from customer-facing copy — put verification and caveats in proposal.notes instead:\n${shown}${more}`;
+}
+
 export const createOptimizeRecommendationTool = {
   name: "create_optimize_recommendation",
   config: {
@@ -133,6 +149,7 @@ export const createOptimizeRecommendationTool = {
       id: z.string(),
       status: z.enum(OPTIMIZE_STATUSES),
       reviewUrl: z.string().optional(),
+      copyRemoved: copyRemovedOutputSchema,
       ...optionalMetaOutputSchema,
     },
     annotations: {
@@ -145,7 +162,7 @@ export const createOptimizeRecommendationTool = {
     const { projectId, agentId, agentLabel, previewHtml, ...payload } = args;
     const actor = agentActor({ agentId, agentLabel }, context.auth);
 
-    const id = await OptimizeService.createRecommendation({
+    const { id, removals } = await OptimizeService.createRecommendation({
       projectId,
       domain: context.project.domain ?? null,
       actor,
@@ -163,12 +180,18 @@ export const createOptimizeRecommendationTool = {
         created.status === "pending_approval"
           ? "It is now in the staff review queue. You will see any comments or change requests via list_optimize_comments / get_optimize_recommendation."
           : "Saved as a draft; staff will not see it until you update it with status pending_approval.",
+        describeRemovals(removals),
         meta.url ? `Review link: ${meta.url}` : "",
       ]
         .filter(Boolean)
         .join("\n"),
       meta,
-      structuredContent: { id, status: created.status, reviewUrl: meta.url },
+      structuredContent: {
+        id,
+        status: created.status,
+        reviewUrl: meta.url,
+        copyRemoved: removals,
+      },
     });
   }),
 };
@@ -212,6 +235,7 @@ export const updateOptimizeRecommendationTool = {
     outputSchema: {
       id: z.string(),
       status: z.enum(OPTIMIZE_STATUSES),
+      copyRemoved: copyRemovedOutputSchema,
       ...optionalMetaOutputSchema,
     },
     annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: false },
@@ -220,7 +244,7 @@ export const updateOptimizeRecommendationTool = {
     const { projectId, id, agentId, agentLabel, previewHtml, ...payload } = args;
     const actor = agentActor({ agentId, agentLabel }, context.auth);
 
-    await OptimizeService.updateRecommendation({
+    const { removals } = await OptimizeService.updateRecommendation({
       id,
       projectId,
       actor,
@@ -231,9 +255,11 @@ export const updateOptimizeRecommendationTool = {
     const updated = await OptimizeService.get(id, projectId);
     const meta = buildProjectMeta(context, projectId, optimizePath(projectId, id));
     return mcpResponse({
-      text: `Recommendation ${id} revised (${updated.status}).`,
+      text: [`Recommendation ${id} revised (${updated.status}).`, describeRemovals(removals)]
+        .filter(Boolean)
+        .join("\n"),
       meta,
-      structuredContent: { id, status: updated.status },
+      structuredContent: { id, status: updated.status, copyRemoved: removals },
     });
   }),
 };

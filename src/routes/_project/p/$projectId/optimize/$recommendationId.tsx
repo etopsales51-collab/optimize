@@ -67,6 +67,20 @@ function OptimizeDetailPage() {
     void queryClient.invalidateQueries({ queryKey: ["optimize", projectId] });
   };
 
+  // Agent notes stripped from publishable fields on write, recorded as job
+  // events so the removal is visible here rather than silent.
+  const copyRemovals = (data?.events ?? []).flatMap((event) => {
+    if (event.eventType !== "copy_sanitized") return [];
+    try {
+      const detail = JSON.parse(event.detailJson) as {
+        removed?: Array<{ field: string; text: string }>;
+      };
+      return detail.removed ?? [];
+    } catch {
+      return [];
+    }
+  });
+
   const commentMutation = useMutation({
     mutationFn: (body: string) =>
       addOptimizeComment({ data: { projectId, id: recommendationId, body } }),
@@ -293,6 +307,37 @@ function OptimizeDetailPage() {
               The approval still stands. Fix the cause — usually the connection
               in Project settings &rarr; Publishing — then Retry publish.
             </p>
+          </div>
+        ) : null}
+
+        {copyRemovals.length ? (
+          <div className="rounded-lg border border-warning/40 bg-warning/10 p-4">
+            <p className="flex items-center gap-2 text-sm font-semibold">
+              <AlertTriangle className="size-4" />
+              Stripped from customer copy ({copyRemovals.length})
+            </p>
+            <p className="mt-1 text-xs text-base-content/60">
+              Agent working notes found in publishable fields were removed
+              before this was stored. What you see below is what will publish.
+              If something useful went, ask the agent to put it in its notes.
+            </p>
+            <ul className="mt-2 space-y-1 text-xs">
+              {copyRemovals.slice(0, 8).map((removal, index) => (
+                <li key={`${removal.field}-${index}`} className="flex gap-2">
+                  <span className="shrink-0 font-mono text-base-content/50">
+                    {removal.field}
+                  </span>
+                  <span className="text-base-content/80 line-through">
+                    {removal.text}
+                  </span>
+                </li>
+              ))}
+              {copyRemovals.length > 8 ? (
+                <li className="text-base-content/50">
+                  …and {copyRemovals.length - 8} more.
+                </li>
+              ) : null}
+            </ul>
           </div>
         ) : null}
 

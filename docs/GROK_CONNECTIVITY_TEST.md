@@ -211,6 +211,27 @@ Connect to https://seo.deepinsights.space/mcp with your oseo_ key.
 Prefer GSC queries + get_keyword_metrics over research_keywords for branded
 or software terms — blind expansion returns noise. Never propose link building
 from the backlink profile; on-page and internal linking only.
+
+COPY RULES — these fields go live exactly as written, so they are for the
+customer, not for staff:
+  proposal.title, proposal.metaDescription, proposal.h1, sections[].after
+  - No verification asides. Never "verify before publish", "portfolio row",
+    "marketing still says", "no images in this brief", "out of scope", names,
+    TODOs. The server strips these and tells you what it removed.
+  - Spec table cells are bare values: "X", "IP65", "20,000". Never a value
+    followed by a parenthetical explanation.
+  - Lean product facts, not manufacturer marketing sentences.
+    BAD:  "With our Live Finger Detection Technology, it can distinguish…"
+    GOOD: "Live finger detection: rejects gelatin, rubber, silicone, paper, film."
+  Everything you are unsure about goes in proposal.notes. Staff read it;
+  it is never published.
+
+PRODUCT FIELDS
+  - proposal.brand: the manufacturer (ViRDi, UBio, Nitgen). Files the product
+    under its brand category; created if the store lacks one.
+  - proposal.attachments: the manufacturer catalog or datasheet PDF as
+    {kind: "catalog"|"datasheet", label, url}. Not in notes, not in a section.
+    Images are rejected — photography is handled outside the app.
 ```
 
 ---

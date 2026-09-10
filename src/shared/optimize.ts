@@ -204,6 +204,29 @@ export const optimizeProposalSchema = z.object({
   // Uncategorized. Optional: when absent it is inferred from the H1, but an
   // agent that knows the brand should say so rather than leave it to a guess.
   brand: z.string().max(80).optional(),
+  // Manufacturer documents for this product — a catalog or datasheet PDF, the
+  // thing staff were previously digging out of `notes` by hand. A first-class
+  // field so the card carries the URL and publishing can act on it.
+  //
+  // Documents only. Product photography is commissioned, not scraped off a
+  // manufacturer's site, so images are rejected rather than silently ignored.
+  attachments: z
+    .array(
+      z.object({
+        kind: z.enum(["catalog", "datasheet", "manual", "certificate"]),
+        label: z.string().min(1).max(200),
+        url: z
+          .string()
+          .url()
+          .max(2000)
+          .refine(
+            (value) => !/\.(jpe?g|png|gif|webp|avif|svg|bmp)(\?|#|$)/i.test(value),
+            "Attachments are documents, not images — product photography is handled outside this app.",
+          ),
+      }),
+    )
+    .max(10)
+    .default([]),
   notes: z.string().max(5000).default(""),
 });
 export type OptimizeProposal = z.infer<typeof optimizeProposalSchema>;

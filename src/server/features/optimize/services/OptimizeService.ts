@@ -25,6 +25,7 @@ import {
 } from "@/shared/optimize";
 import { OptimizeRepository } from "../repositories/OptimizeRepository";
 import { sanitizePreviewHtml } from "../previewSanitizer";
+import { sanitizeProposalCopy, type CopyRemoval } from "../copySanitizer";
 
 export type AgentActor = { type: "agent"; id: string; label: string };
 export type UserActor = { type: "user"; id: string; label: string };
@@ -117,6 +118,11 @@ async function createRecommendation(input: {
   assertCannibalizationRules(data.type, data.cannibalizationCheck);
   assertMergeShape(data.type, data.merge);
 
+  // Publishable copy is cleaned on the way in, so what is stored is already the
+  // customer's version. `notes` is untouched — that is where the agent's
+  // working detail belongs, and nothing publishes it.
+  const { proposal, removals } = sanitizeProposalCopy(data.proposal);
+
   const id = crypto.randomUUID();
 
   await OptimizeRepository.createRecommendation({
@@ -132,7 +138,7 @@ async function createRecommendation(input: {
     secondaryQueries: data.secondaryQueries,
     merge: data.merge ?? null,
     evidence: data.evidence,
-    proposal: data.proposal,
+    proposal,
     cannibalizationCheck: data.cannibalizationCheck,
     pageSnapshot: data.pageSnapshot ?? null,
     previewHtml: sanitizePreviewHtml(input.previewHtml) || null,
@@ -147,7 +153,35 @@ async function createRecommendation(input: {
     detail: { type: data.type, status: data.status, targetUrl: data.targetUrl },
   });
 
-  return id;
+  await recordCopyRemovals(id, actorKey(input.actor), removals);
+
+  return { id, removals };
+}
+
+/**
+ * Put what was stripped on the record.
+ *
+ * A silent strip is the failure mode worth designing against: staff would see
+ * copy that differs from what the agent wrote with no way to tell why, and a
+ * wrong removal would never be noticed. The event puts it in the timeline on
+ * the detail page, and the agent gets the same list back from its tool call.
+ */
+async function recordCopyRemovals(
+  recommendationId: string,
+  actor: string,
+  removals: CopyRemoval[],
+) {
+  if (removals.length === 0) return;
+  await OptimizeRepository.addJobEvent({
+    id: crypto.randomUUID(),
+    recommendationId,
+    eventType: "copy_sanitized",
+    actor,
+    detail: {
+      count: removals.length,
+      removed: removals.slice(0, 30),
+    },
+  });
 }
 
 /**
@@ -200,6 +234,12 @@ async function updateRecommendation(input: {
     );
   }
 
+  // Same cleaning as create — a revision is the other way copy gets in.
+  const cleaned =
+    patch.proposal === undefined
+      ? null
+      : sanitizeProposalCopy(patch.proposal);
+
   await OptimizeRepository.updateRecommendation(input.id, input.projectId, {
     status: nextStatus,
     priority: patch.priority,
@@ -209,7 +249,7 @@ async function updateRecommendation(input: {
     secondaryQueries: patch.secondaryQueries,
     merge: patch.merge,
     evidence: patch.evidence,
-    proposal: patch.proposal,
+    proposal: cleaned?.proposal,
     cannibalizationCheck: patch.cannibalizationCheck,
     pageSnapshot: patch.pageSnapshot,
     previewHtml:
@@ -236,6 +276,11 @@ async function updateRecommendation(input: {
     actor: actorKey(input.actor),
     detail: { from: existing.status, to: nextStatus ?? existing.status },
   });
+
+  const removals = cleaned?.removals ?? [];
+  await recordCopyRemovals(input.id, actorKey(input.actor), removals);
+
+  return { removals };
 }
 
 // ---------------------------------------------------------------------------

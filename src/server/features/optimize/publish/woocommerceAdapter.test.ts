@@ -54,6 +54,7 @@ const proposal: OptimizeProposal = {
   },
   sections: [{ heading: "Specs", action: "rewrite", after: "<p>New body</p>" }],
   internalLinks: [],
+  attachments: [],
   notes: "",
 };
 
@@ -185,6 +186,7 @@ describe("plan", () => {
       metaDescription: { before: "", after: "Wacom STU-430 4.5-inch pad." },
       sections: [],
       internalLinks: [],
+      attachments: [],
       notes: "",
     };
     const result = await plan(credentials, PRODUCT_URL, unchanged, UPDATE);
@@ -277,6 +279,7 @@ describe("publish — updating an existing product", () => {
       metaDescription: { before: "", after: "Wacom STU-430 4.5-inch pad." },
       sections: [],
       internalLinks: [],
+      attachments: [],
       notes: "",
     };
 
@@ -361,6 +364,7 @@ describe("publish — creating from a new page brief", () => {
       { heading: "Key specifications", action: "add", after: "<p>IP65 / IK09</p>" },
     ],
     internalLinks: [],
+    attachments: [],
     notes: "",
   };
   const NEW_URL = "https://www.ubio.ae/product/virdi-ac-5000-ik/";

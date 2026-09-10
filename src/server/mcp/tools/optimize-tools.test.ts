@@ -66,13 +66,13 @@ const baseArgs = {
   projectId: "proj_1",
   type: "content_refresh" as const,
   targetUrl: "https://wacomme.ae/pens",
-  proposal: { sections: [], internalLinks: [], notes: "" },
+  proposal: { sections: [], internalLinks: [], attachments: [], notes: "" },
   cannibalizationCheck: clearCheck,
 };
 
 beforeEach(() => {
   mocks.getProjectForOrganization.mockResolvedValue(PROJECT);
-  mocks.createRecommendation.mockResolvedValue("rec_1");
+  mocks.createRecommendation.mockResolvedValue({ id: "rec_1", removals: [] });
   mocks.get.mockResolvedValue({
     id: "rec_1",
     status: "pending_approval",

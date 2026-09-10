@@ -382,6 +382,83 @@ export async function testConnections(
   return results;
 }
 
+/**
+ * Read-only look at what a product actually stores.
+ *
+ * Exists to answer one question without anyone pasting a credential anywhere:
+ * which meta key does this store's product template read for its datasheet?
+ * wacomme.ae renders a per-product datasheet button from a shared Elementor
+ * template, so the URL must live on the product — this shows where. Values are
+ * truncated because a meta field can hold a whole Elementor document, and the
+ * secret stays sealed server-side as with every other call here.
+ */
+export type ProductFieldInspection =
+  | {
+      ok: true;
+      productId: number;
+      name: string;
+      status: string;
+      categories: string[];
+      metaKeys: Array<{ key: string; value: string }>;
+    }
+  | { ok: false; reason: string };
+
+export async function inspectProductFields(
+  projectId: string,
+  productUrl: string,
+): Promise<ProductFieldInspection> {
+  const row = await getRow(projectId);
+  const consumerSecret = await openSecret(row?.wooConsumerSecretSealed ?? null);
+  if (!row?.wordpressBaseUrl || !row.wooConsumerKey || !consumerSecret) {
+    return {
+      ok: false,
+      reason: "WooCommerce is not connected for this project — save the store URL, key and secret first.",
+    };
+  }
+
+  const credentials = {
+    baseUrl: row.wordpressBaseUrl,
+    consumerKey: row.wooConsumerKey,
+    consumerSecret,
+  };
+  const resolved = await woocommerce.resolveProduct(credentials, productUrl);
+  if (!resolved.ok) return { ok: false, reason: resolved.reason };
+
+  const base = row.wordpressBaseUrl.replace(/\/+$/, "");
+  const auth = btoa(`${row.wooConsumerKey}:${consumerSecret}`);
+  const response = await fetch(
+    `${base}/wp-json/wc/v3/products/${resolved.target.id}`,
+    {
+      headers: { Authorization: `Basic ${auth}`, Accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
+    },
+  );
+  if (!response.ok) {
+    return { ok: false, reason: `Store returned ${response.status} for the product.` };
+  }
+
+  const product = (await response.json().catch(() => ({}))) as {
+    meta_data?: Array<{ key?: string; value?: unknown }>;
+  };
+  const metaKeys = (product.meta_data ?? [])
+    .filter((entry) => typeof entry.key === "string")
+    .map((entry) => {
+      const raw =
+        typeof entry.value === "string" ? entry.value : JSON.stringify(entry.value ?? "");
+      return { key: entry.key as string, value: raw.slice(0, 160) };
+    })
+    .sort((a, b) => a.key.localeCompare(b.key));
+
+  return {
+    ok: true,
+    productId: resolved.target.id,
+    name: resolved.target.name,
+    status: resolved.target.status,
+    categories: resolved.target.categories.map((category) => category.name),
+    metaKeys,
+  };
+}
+
 export type PublishOutcome = {
   ok: boolean;
   reason?: string;

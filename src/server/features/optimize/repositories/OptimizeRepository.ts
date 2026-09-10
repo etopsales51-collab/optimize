@@ -80,6 +80,7 @@ function hydrate(row: RecommendationRow): OptimizeRecommendationRecord {
     proposal: parseJson<OptimizeProposal>(proposalJson, {
       sections: [],
       internalLinks: [],
+      attachments: [],
       notes: "",
     }),
     cannibalizationCheck: parseJson<CannibalizationCheck | null>(

@@ -1,3 +1,6 @@
+import { Check, Copy, ExternalLink, FileText } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 import type { OptimizeProposal } from "@/shared/optimize";
 
 /**
@@ -82,6 +85,7 @@ export function BeforeAfter({
 }) {
   const sections = proposal.sections ?? [];
   const links = proposal.internalLinks ?? [];
+  const attachments = proposal.attachments ?? [];
   const hasMeta = proposal.title || proposal.metaDescription || proposal.h1;
 
   return (
@@ -197,14 +201,99 @@ export function BeforeAfter({
         </section>
       ) : null}
 
-      {proposal.notes ? (
+      {attachments.length ? (
         <section className="rounded-lg border border-base-300 bg-base-100 p-4">
-          <h3 className="text-sm font-semibold">Why this</h3>
-          <p className="mt-2 whitespace-pre-wrap text-sm text-base-content/75">
+          <h3 className="text-sm font-semibold">
+            {attachments.length === 1 ? "Catalog" : "Catalogs & documents"}
+          </h3>
+          <p className="mt-1 text-xs text-base-content/55">
+            Manufacturer documents for this product. Upload to the media library
+            when publishing is not doing it for you.
+          </p>
+          <ul className="mt-3 space-y-2">
+            {attachments.map((attachment, index) => (
+              <AttachmentRow
+                key={`${attachment.url}-${index}`}
+                attachment={attachment}
+              />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {proposal.notes ? (
+        <section className="rounded-lg border border-dashed border-base-300 bg-base-200/40 p-4">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-base-content/70">
+              Staff only
+            </h3>
+            <span className="badge badge-ghost badge-xs">never published</span>
+          </div>
+          <p className="mt-1 text-xs text-base-content/50">
+            The agent&rsquo;s working notes: what it could not verify, where
+            sources disagree, what it left out. Nothing here reaches the site.
+          </p>
+          <p className="mt-2 whitespace-pre-wrap text-sm text-base-content/70">
             {proposal.notes}
           </p>
         </section>
       ) : null}
     </div>
+  );
+}
+
+const ATTACHMENT_KIND_LABEL = {
+  catalog: "Catalog",
+  datasheet: "Datasheet",
+  manual: "Manual",
+  certificate: "Certificate",
+} as const;
+
+function AttachmentRow({
+  attachment,
+}: {
+  attachment: NonNullable<OptimizeProposal["attachments"]>[number];
+}) {
+  const [copied, setCopied] = useState(false);
+  const isPdf = /\.pdf(\?|#|$)/i.test(attachment.url);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(attachment.url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error("Could not copy — select the URL and copy it by hand.");
+    }
+  };
+
+  return (
+    <li className="flex flex-wrap items-center gap-2 rounded-md border border-base-300 bg-base-200/40 p-2">
+      <FileText className="size-4 shrink-0 text-base-content/60" />
+      <span className="badge badge-sm badge-outline">
+        {ATTACHMENT_KIND_LABEL[attachment.kind]}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium">
+          {attachment.label}
+        </span>
+        <span className="block truncate text-xs text-base-content/50">
+          {attachment.url}
+        </span>
+      </span>
+      <a
+        href={attachment.url}
+        target="_blank"
+        rel="noopener noreferrer nofollow"
+        className="btn btn-xs"
+      >
+        <ExternalLink className="size-3.5" />
+        {isPdf ? "Open PDF" : "Open"}
+      </a>
+      <button type="button" className="btn btn-xs" onClick={copy}>
+        {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+        {copied ? "Copied" : "Copy URL"}
+      </button>
+    </li>
   );
 }

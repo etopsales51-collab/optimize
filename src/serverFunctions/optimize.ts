@@ -10,6 +10,7 @@ import {
 import { requireProjectContext } from "@/serverFunctions/middleware";
 import {
   getSettingsView,
+  inspectProductFields,
   previewPublish,
   publishApproved,
   saveSettings,
@@ -227,6 +228,20 @@ export const testPublishConnections = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     requireOrgPermission(context, { member: ["update"] });
     return { checks: await testConnections(context.projectId) };
+  });
+
+/**
+ * Show what one product stores — its meta keys, status and categories.
+ * Read-only, same permission as the credentials, and the secret never leaves
+ * the server. Exists to find which field a store's template reads for its
+ * datasheet before publishing learns to write it.
+ */
+export const inspectPublishProduct = createServerFn({ method: "POST" })
+  .middleware(requireProjectContext)
+  .validator(projectScopedSchema.extend({ productUrl: z.string().url() }))
+  .handler(async ({ data, context }) => {
+    requireOrgPermission(context, { member: ["update"] });
+    return inspectProductFields(context.projectId, data.productUrl);
   });
 
 /** What publishing would change. Touches nothing. */
