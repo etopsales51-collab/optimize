@@ -262,19 +262,55 @@ export async function testConnections(
   } else {
     try {
       const auth = btoa(`${row.wooConsumerKey}:${consumerSecret}`);
-      const response = await fetch(`${base}/wp-json/wc/v3/products?per_page=1`, {
-        headers: { Authorization: `Basic ${auth}` },
-        signal: AbortSignal.timeout(15_000),
-      });
-      results.push({
-        channel: "woocommerce",
-        ok: response.ok,
-        detail: response.ok
-          ? "Connected — products readable."
-          : response.status === 401 || response.status === 403
-            ? "Rejected (401/403). Check the key and that it has Read/Write."
-            : `Store returned ${response.status}.`,
-      });
+      const readResponse = await fetch(
+        `${base}/wp-json/wc/v3/products?per_page=1`,
+        {
+          headers: { Authorization: `Basic ${auth}` },
+          signal: AbortSignal.timeout(15_000),
+        },
+      );
+
+      if (!readResponse.ok) {
+        results.push({
+          channel: "woocommerce",
+          ok: false,
+          detail:
+            readResponse.status === 401 || readResponse.status === 403
+              ? "Rejected (401/403). Check the consumer key and secret."
+              : `Store returned ${readResponse.status}.`,
+        });
+      } else {
+        // Reading is not enough. A Read-only key reads perfectly and then
+        // fails the moment publishing writes — which is exactly how this test
+        // gave false confidence once already.
+        //
+        // So probe the WRITE permission too, safely: a PUT to an id that
+        // cannot exist. WooCommerce checks the key's permission BEFORE it
+        // looks the product up, so a read-only key answers 401 "does not have
+        // write permissions" while a Read/Write key gets as far as 404. No
+        // real product is touched either way.
+        const writeProbe = await fetch(
+          `${base}/wp-json/wc/v3/products/999999999`,
+          {
+            method: "PUT",
+            headers: {
+              Authorization: `Basic ${auth}`,
+              "Content-Type": "application/json",
+            },
+            body: "{}",
+            signal: AbortSignal.timeout(15_000),
+          },
+        );
+
+        const canWrite = writeProbe.status !== 401 && writeProbe.status !== 403;
+        results.push({
+          channel: "woocommerce",
+          ok: canWrite,
+          detail: canWrite
+            ? "Connected — products readable and writable."
+            : "Readable, but the key is READ-ONLY, so publishing will fail. In WooCommerce → Settings → Advanced → REST API, set this key's permission to Read/Write (a new secret is issued, so paste both again).",
+        });
+      }
     } catch {
       results.push({
         channel: "woocommerce",
