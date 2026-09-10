@@ -103,6 +103,13 @@ async function describeFailure(response: Response): Promise<string> {
   return `WooCommerce returned ${response.status}. ${body.slice(0, 200)}`;
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 function readMeta(meta: MetaRow[] | undefined, key: string): string {
   const row = meta?.find((entry) => entry.key === key);
   return typeof row?.value === "string" ? row.value : "";
@@ -183,6 +190,126 @@ function planChanges(
   }
 
   return changes;
+}
+
+/**
+ * Create a product from a new_page_brief, as a DRAFT.
+ *
+ * Draft, not published, and that is the important decision. A brief carries
+ * content — a name, an overview, specifications — but nothing commercial: no
+ * price, no SKU, no images, no category, no stock. A product published with
+ * those missing is worse for a store than no product at all: it can be
+ * indexed, linked and found by a customer who then cannot buy it.
+ *
+ * So this writes everything the brief legitimately knows and stops. The person
+ * adds price and images in WordPress and presses Publish, which is one click
+ * and the only step that needs a human judgement anyway.
+ *
+ * The site's product layout is not copied because it does not need to be:
+ * every product on this store renders from one shared Elementor template, so a
+ * new product inherits it on publish.
+ *
+ * Field mapping is deliberate. `name` comes from the H1 — the product's real
+ * name — never from the SEO title, which is a search-results headline and
+ * would read as marketing copy in the catalogue and on invoices.
+ */
+export async function createDraftProduct(
+  credentials: WooCredentials,
+  targetUrl: string,
+  proposal: OptimizeProposal,
+): Promise<ApplyResult> {
+  let slug: string;
+  try {
+    const segments = new URL(targetUrl).pathname.split("/").filter(Boolean);
+    slug = segments[segments.length - 1] ?? "";
+  } catch {
+    return { ok: false, reason: `Not a valid URL: ${targetUrl}` };
+  }
+  if (!slug) {
+    return { ok: false, reason: "That URL has no slug to create a product at." };
+  }
+
+  // Refuse if something already lives at this slug — creating a second would
+  // produce the duplicate URLs the whole anti-cannibalization rule exists to
+  // prevent.
+  const existing = await resolveProduct(credentials, targetUrl);
+  if (existing.ok) {
+    return {
+      ok: false,
+      reason: `A product already exists at "${slug}" (id ${existing.target.id}). Change this recommendation to content_refresh so it improves that product instead of creating a duplicate.`,
+    };
+  }
+
+  const name = proposal.h1?.after?.trim();
+  if (!name) {
+    return {
+      ok: false,
+      reason:
+        "This brief has no H1, so there is no product name to create. Ask the agent to add one.",
+    };
+  }
+
+  // The brief's sections become the product description, in order.
+  const description = (proposal.sections ?? [])
+    .filter((section) => section.action !== "remove" && section.after?.trim())
+    .map((section) =>
+      section.heading
+        ? `<h2>${escapeHtml(section.heading)}</h2>\n${section.after}`
+        : section.after,
+    )
+    .join("\n\n");
+
+  const metaData = [
+    proposal.title?.after?.trim()
+      ? { key: "rank_math_title", value: proposal.title.after.trim() }
+      : null,
+    proposal.metaDescription?.after?.trim()
+      ? {
+          key: "rank_math_description",
+          value: proposal.metaDescription.after.trim(),
+        }
+      : null,
+  ].filter((row): row is { key: string; value: string } => row !== null);
+
+  const response = await wooFetch(credentials, "/products", {
+    method: "POST",
+    body: JSON.stringify({
+      name,
+      slug,
+      type: "simple",
+      // The safety property of this whole function.
+      status: "draft",
+      description,
+      meta_data: metaData,
+    }),
+  });
+
+  if (!response.ok) return { ok: false, reason: await describeFailure(response) };
+
+  const created = (await response.json().catch(() => ({}))) as {
+    id?: number;
+    name?: string;
+    permalink?: string;
+  };
+  if (!created.id) {
+    return { ok: false, reason: "WooCommerce did not return a product id." };
+  }
+
+  return {
+    ok: true,
+    target: {
+      id: created.id,
+      name: created.name ?? name,
+      permalink: created.permalink ?? targetUrl,
+      currentSeoTitle: "",
+      currentSeoDescription: "",
+    },
+    applied: [
+      { field: "rank_math_title", label: "SEO title", before: "", after: proposal.title?.after ?? "" },
+      { field: "rank_math_description", label: "Meta description", before: "", after: proposal.metaDescription?.after ?? "" },
+    ],
+    revisionHint: `Created as DRAFT product ${created.id}. Add price, images, SKU and category in WordPress, then publish it.`,
+  };
 }
 
 export async function dryRun(

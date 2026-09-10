@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { apply, dryRun, resolveProduct } from "./woocommerceAdapter";
+import {
+  apply,
+  createDraftProduct,
+  dryRun,
+  resolveProduct,
+} from "./woocommerceAdapter";
 import type { OptimizeProposal } from "@/shared/optimize";
 
 /**
@@ -235,5 +240,88 @@ describe("apply", () => {
     );
     const result = await apply(credentials, PRODUCT_URL, proposal);
     expect(result).toMatchObject({ ok: false });
+  });
+});
+
+describe("createDraftProduct (new_page_brief)", () => {
+  const brief: OptimizeProposal = {
+    title: { before: "", after: "ViRDi AC-5000 IK UAE | Outdoor Fingerprint" },
+    metaDescription: { before: "", after: "Buy the ViRDi AC-5000 IK in the UAE." },
+    h1: { before: "", after: "ViRDi AC-5000 IK — Outdoor Fingerprint Terminal" },
+    sections: [
+      { heading: "Product overview", action: "add", after: "<p>Built for harsh sites.</p>" },
+      { heading: "Key specifications", action: "add", after: "<p>IP65 / IK09</p>" },
+    ],
+    internalLinks: [],
+    notes: "",
+  };
+  const NEW_URL = "https://www.ubio.ae/product/virdi-ac-5000-ik/";
+
+  it("creates as a DRAFT — never live without price, images or SKU", async () => {
+    let body: Record<string, unknown> | null = null;
+    mockFetch((url, init) => {
+      if (init?.method === "POST") {
+        body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        return Response.json({ id: 900, name: "x", permalink: NEW_URL });
+      }
+      return Response.json([]); // nothing at that slug yet
+    });
+
+    const result = await createDraftProduct(credentials, NEW_URL, brief);
+    expect(result.ok).toBe(true);
+    expect(body).toMatchObject({ status: "draft" });
+  });
+
+  it("names the product from the H1, not the SEO title", async () => {
+    let body: Record<string, unknown> | null = null;
+    mockFetch((url, init) => {
+      if (init?.method === "POST") {
+        body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        return Response.json({ id: 900 });
+      }
+      return Response.json([]);
+    });
+
+    await createDraftProduct(credentials, NEW_URL, brief);
+    // The SEO title is a search headline; using it as the catalogue name would
+    // put marketing copy in the cart and on invoices.
+    expect(body).toMatchObject({
+      name: "ViRDi AC-5000 IK — Outdoor Fingerprint Terminal",
+      slug: "virdi-ac-5000-ik",
+    });
+    expect(body).not.toMatchObject({ name: brief.title?.after });
+  });
+
+  it("sets no price, stock or SKU — a person supplies those", async () => {
+    let body: Record<string, unknown> | null = null;
+    mockFetch((url, init) => {
+      if (init?.method === "POST") {
+        body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        return Response.json({ id: 900 });
+      }
+      return Response.json([]);
+    });
+
+    await createDraftProduct(credentials, NEW_URL, brief);
+    for (const field of ["regular_price", "price", "sku", "stock_quantity", "categories"]) {
+      expect(body).not.toHaveProperty(field);
+    }
+  });
+
+  it("refuses to create a duplicate when the slug is taken", async () => {
+    mockFetch(() => Response.json([productRow]));
+    const result = await createDraftProduct(credentials, NEW_URL, brief);
+    expect(result).toMatchObject({ ok: false });
+    if (!result.ok) expect(result.reason).toContain("content_refresh");
+  });
+
+  it("refuses a brief with no H1, since there is no product name", async () => {
+    mockFetch(() => Response.json([]));
+    const result = await createDraftProduct(credentials, NEW_URL, {
+      ...brief,
+      h1: undefined,
+    });
+    expect(result).toMatchObject({ ok: false });
+    if (!result.ok) expect(result.reason).toContain("no H1");
   });
 });

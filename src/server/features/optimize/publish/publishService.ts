@@ -413,6 +413,32 @@ export async function previewPublish(
     };
   }
 
+  if (recommendation.type === "new_page_brief") {
+    // Nothing exists to diff against, so report the intent instead of a
+    // before/after, and confirm the slug is genuinely free.
+    const clash = await woocommerce.resolveProduct(
+      loaded.credentials,
+      recommendation.targetUrl,
+    );
+    if (clash.ok) {
+      return {
+        ok: false,
+        reason: `A product already exists at that URL (id ${clash.target.id}). Change this to content_refresh rather than creating a duplicate.`,
+      };
+    }
+    return {
+      ok: true,
+      changes: [
+        {
+          field: "rank_math_title",
+          label: "Will CREATE a draft product named",
+          before: "(does not exist)",
+          after: recommendation.proposal.h1?.after ?? "(no H1 in the brief)",
+        },
+      ],
+    };
+  }
+
   const result = await woocommerce.dryRun(
     loaded.credentials,
     recommendation.targetUrl,
@@ -471,11 +497,20 @@ export async function publishApproved(input: {
     execution: { channel: "wp_rest" },
   });
 
-  const result = await woocommerce.apply(
-    loaded.credentials,
-    recommendation.targetUrl,
-    recommendation.proposal,
-  );
+  // A brief has no product to update — it creates one, as a draft. Everything
+  // else edits an existing product's SEO fields.
+  const result =
+    recommendation.type === "new_page_brief"
+      ? await woocommerce.createDraftProduct(
+          loaded.credentials,
+          recommendation.targetUrl,
+          recommendation.proposal,
+        )
+      : await woocommerce.apply(
+          loaded.credentials,
+          recommendation.targetUrl,
+          recommendation.proposal,
+        );
 
   if (!result.ok) {
     await OptimizeRepository.updateRecommendation(recommendationId, projectId, {
