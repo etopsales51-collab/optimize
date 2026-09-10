@@ -9,6 +9,29 @@ set -e
 
 echo 'OpenSEO sends an anonymous usage heartbeat (counts only). Disable: OPENSEO_TELEMETRY_DISABLED=1. Details: docs/SELF_HOSTING_DOCKER.md#telemetry'
 
+# With CLOUDFLARE_INCLUDE_PROCESS_ENV, wrangler copies EVERY variable in this
+# shell into dist/.dev.vars for vite preview, quoting each one. It refuses a
+# value that holds a single quote AND a backtick AND a double quote, backslash
+# or newline, and the whole build fails. No secret looks like that; a git
+# commit message does, and Railway injects the latest one as
+# RAILWAY_GIT_COMMIT_MESSAGE. That took the site down once. Free-text
+# variables nothing at runtime reads are dropped outright, and anything else
+# the preview could not serialize is dropped by name so the log says why.
+unset RAILWAY_GIT_COMMIT_MESSAGE RAILWAY_GIT_AUTHOR
+NL='
+'
+for name in $(env | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' | sort -u); do
+  eval "value=\${$name-}"
+  case "$value" in *"'"*) ;; *) continue ;; esac
+  case "$value" in *'`'*) ;; *) continue ;; esac
+  case "$value" in
+    *'"'*|*'\'*|*"$NL"*)
+      unset "$name"
+      echo "[warn] Dropped $name: its value mixes quote characters the preview env cannot serialize."
+      ;;
+  esac
+done
+
 # The preflight validates env BEFORE the slow steps, so misconfiguration fails
 # in seconds with the exact fix instead of after a multi-minute build.
 pnpm exec tsx scripts/selfhost-preflight.ts
