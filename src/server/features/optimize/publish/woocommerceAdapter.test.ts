@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  apply,
-  createDraftProduct,
-  dryRun,
+  inferBrand,
+  matchBrandCategory,
+  plan,
+  publish,
   resolveProduct,
+  type ProductCategory,
 } from "./woocommerceAdapter";
 import type { OptimizeProposal } from "@/shared/optimize";
 
@@ -31,6 +33,9 @@ const productRow = {
   price: "1450",
   stock_status: "instock",
   status: "publish",
+  categories: [
+    { id: 17, name: "Signature Pads", slug: "signature-pads", count: 12 },
+  ],
   meta_data: [
     { key: "rank_math_title", value: "Wacom STU-430 LCD Signature Pad | UAE" },
     { key: "rank_math_description", value: "Wacom STU-430 4.5-inch pad." },
@@ -53,8 +58,12 @@ const proposal: OptimizeProposal = {
 };
 
 const PRODUCT_URL = "https://wacomme.ae/product/wacom-stu-430-lcd-signature-pad/";
+const UPDATE = { allowCreate: false };
+const CREATE = { allowCreate: true };
 
-function mockFetch(handler: (url: string, init?: RequestInit) => Response) {
+type Handler = (url: string, init?: RequestInit) => Response;
+
+function mockFetch(handler: Handler) {
   const spy = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
     handler(String(input), init),
   );
@@ -62,8 +71,49 @@ function mockFetch(handler: (url: string, init?: RequestInit) => Response) {
   return spy;
 }
 
-const okLookup = (url: string, init?: RequestInit) =>
-  init?.method === "PUT" ? Response.json(productRow) : Response.json([productRow]);
+/**
+ * A store that answers every endpoint the adapter touches. `product` is what a
+ * slug lookup returns (null for "nothing there yet"), `categories` what a
+ * category search returns, and `onWrite` captures the request body.
+ */
+function mockStore(options: {
+  product?: Record<string, unknown> | null;
+  categories?: ProductCategory[];
+  onWrite?: (body: Record<string, unknown>, url: string) => void;
+  writeStatus?: number;
+}) {
+  const bodies: Record<string, unknown>[] = [];
+  const spy = mockFetch((url, init) => {
+    const method = init?.method ?? "GET";
+
+    if (url.includes("/products/categories")) {
+      if (method === "POST") {
+        const created = JSON.parse(String(init?.body)) as { name: string };
+        return Response.json({
+          id: 777,
+          name: created.name,
+          slug: created.name.toLowerCase(),
+          count: 0,
+        });
+      }
+      return Response.json(options.categories ?? []);
+    }
+
+    if (method === "GET") {
+      return Response.json(options.product ? [options.product] : []);
+    }
+
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    bodies.push(body);
+    options.onWrite?.(body, url);
+    if (options.writeStatus) {
+      return new Response("error", { status: options.writeStatus });
+    }
+    return Response.json({ ...(options.product ?? {}), id: 900, ...body });
+  });
+
+  return { spy, bodies, get body() { return bodies[0] ?? null; } };
+}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -71,17 +121,25 @@ afterEach(() => {
 
 describe("resolveProduct", () => {
   it("resolves a product URL by slug via the WooCommerce API", async () => {
-    const spy = mockFetch(okLookup);
+    const store = mockStore({ product: productRow });
     const result = await resolveProduct(credentials, PRODUCT_URL);
 
     expect(result).toMatchObject({ ok: true, target: { id: 8119 } });
-    expect(String(spy.mock.calls[0][0])).toContain(
+    expect(String(store.spy.mock.calls[0][0])).toContain(
       "/wp-json/wc/v3/products?slug=wacom-stu-430-lcd-signature-pad",
     );
   });
 
+  it("finds drafts too, so a product created earlier is never duplicated", async () => {
+    const store = mockStore({ product: { ...productRow, status: "draft" } });
+    const result = await resolveProduct(credentials, PRODUCT_URL);
+
+    expect(result).toMatchObject({ ok: true, target: { status: "draft" } });
+    expect(String(store.spy.mock.calls[0][0])).toContain("status=any");
+  });
+
   it("reads the Rank Math SEO title, which is NOT the product name", async () => {
-    mockFetch(okLookup);
+    mockStore({ product: productRow });
     const result = await resolveProduct(credentials, PRODUCT_URL);
     if (!result.ok) throw new Error("expected resolution");
 
@@ -101,34 +159,27 @@ describe("resolveProduct", () => {
       expect(result.reason).not.toContain(credentials.consumerSecret);
     }
   });
-
-  it("says clearly when the URL is not a product", async () => {
-    mockFetch(() => Response.json([]));
-    const result = await resolveProduct(credentials, "https://wacomme.ae/about-us/");
-    expect(result).toMatchObject({ ok: false });
-    if (!result.ok) expect(result.reason).toContain("not a WooCommerce product");
-  });
 });
 
-describe("dryRun", () => {
+describe("plan", () => {
   it("reports the SEO changes without sending a write", async () => {
-    const spy = mockFetch(okLookup);
-    const result = await dryRun(credentials, PRODUCT_URL, proposal);
+    const store = mockStore({ product: productRow });
+    const result = await plan(credentials, PRODUCT_URL, proposal, UPDATE);
 
-    expect(result.ok).toBe(true);
+    expect(result).toMatchObject({ ok: true, mode: "update", productId: 8119 });
     if (result.ok) {
-      expect(result.changes.map((c) => c.field).sort()).toEqual([
+      expect(result.changes.map((change) => change.field).sort()).toEqual([
         "rank_math_description",
         "rank_math_title",
       ]);
     }
-    for (const [, init] of spy.mock.calls) {
+    for (const [, init] of store.spy.mock.calls) {
       expect((init as RequestInit | undefined)?.method ?? "GET").toBe("GET");
     }
   });
 
-  it("refuses when the SEO fields already match", async () => {
-    mockFetch(okLookup);
+  it("plans nothing when the SEO fields already match", async () => {
+    mockStore({ product: productRow });
     const unchanged: OptimizeProposal = {
       title: { before: "", after: "Wacom STU-430 LCD Signature Pad | UAE" },
       metaDescription: { before: "", after: "Wacom STU-430 4.5-inch pad." },
@@ -136,120 +187,149 @@ describe("dryRun", () => {
       internalLinks: [],
       notes: "",
     };
-    const result = await dryRun(credentials, PRODUCT_URL, unchanged);
+    const result = await plan(credentials, PRODUCT_URL, unchanged, UPDATE);
+    expect(result).toMatchObject({ ok: true, mode: "update" });
+    if (result.ok) expect(result.changes).toEqual([]);
+  });
+
+  it("refuses to update a URL that has no product, and says what to do", async () => {
+    mockStore({ product: null });
+    const result = await plan(credentials, PRODUCT_URL, proposal, UPDATE);
     expect(result).toMatchObject({ ok: false });
-    if (!result.ok) expect(result.reason).toContain("already match");
+    if (!result.ok) expect(result.reason).toContain("new page brief");
   });
 });
 
-describe("apply", () => {
+describe("publish — updating an existing product", () => {
   it("writes ONLY the two Rank Math meta fields", async () => {
-    let body: Record<string, unknown> | null = null;
-    mockFetch((url, init) => {
-      if (init?.method === "PUT") {
-        body = JSON.parse(String(init.body)) as Record<string, unknown>;
-        return Response.json(productRow);
-      }
-      return Response.json([productRow]);
-    });
+    const store = mockStore({ product: productRow });
 
-    const result = await apply(credentials, PRODUCT_URL, proposal);
-    expect(result.ok).toBe(true);
-    expect(Object.keys(body ?? {})).toEqual(["meta_data"]);
+    const result = await publish(credentials, PRODUCT_URL, proposal, UPDATE);
+    expect(result).toMatchObject({ ok: true, mode: "update" });
+    expect(Object.keys(store.body ?? {})).toEqual(["meta_data"]);
 
-    const metaData = (body as unknown as { meta_data: Array<{ key: string }> })
+    const metaData = (store.body as unknown as { meta_data: Array<{ key: string }> })
       .meta_data;
-    expect(metaData.map((m) => m.key).sort()).toEqual([
+    expect(metaData.map((row) => row.key).sort()).toEqual([
       "rank_math_description",
       "rank_math_title",
     ]);
   });
 
   it("NEVER renames the product — name is not in the request body", async () => {
-    let body: Record<string, unknown> | null = null;
-    mockFetch((url, init) => {
-      if (init?.method === "PUT") {
-        body = JSON.parse(String(init.body)) as Record<string, unknown>;
-        return Response.json(productRow);
-      }
-      return Response.json([productRow]);
-    });
-
-    await apply(credentials, PRODUCT_URL, proposal);
+    const store = mockStore({ product: productRow });
+    await publish(credentials, PRODUCT_URL, proposal, UPDATE);
     // The SEO title differs from the product name; writing it to `name` would
     // change what shoppers see everywhere.
-    expect(body).not.toHaveProperty("name");
-    expect(JSON.stringify(body)).not.toContain("Buy in Dubai & Abu Dhabi\",\"name");
+    expect(store.body).not.toHaveProperty("name");
   });
 
-  it("NEVER touches price, stock, status, categories or images", async () => {
-    let body: Record<string, unknown> | null = null;
-    mockFetch((url, init) => {
-      if (init?.method === "PUT") {
-        body = JSON.parse(String(init.body)) as Record<string, unknown>;
-        return Response.json(productRow);
-      }
-      return Response.json([productRow]);
-    });
+  it("NEVER touches price, stock, SKU or images", async () => {
+    const store = mockStore({ product: productRow });
+    await publish(credentials, PRODUCT_URL, proposal, UPDATE);
 
-    await apply(credentials, PRODUCT_URL, proposal);
     for (const forbidden of [
       "price",
       "regular_price",
       "sale_price",
       "stock_status",
       "stock_quantity",
-      "status",
-      "categories",
       "images",
       "sku",
     ]) {
-      expect(body).not.toHaveProperty(forbidden);
+      expect(store.body).not.toHaveProperty(forbidden);
     }
   });
 
-  it("does not write body content — sections are applied by hand", async () => {
-    let body: Record<string, unknown> | null = null;
-    mockFetch((url, init) => {
-      if (init?.method === "PUT") {
-        body = JSON.parse(String(init.body)) as Record<string, unknown>;
-        return Response.json(productRow);
-      }
-      return Response.json([productRow]);
-    });
+  it("leaves the status and categories of a live, categorised product alone", async () => {
+    const store = mockStore({ product: productRow });
+    await publish(credentials, PRODUCT_URL, proposal, UPDATE);
+    expect(store.body).not.toHaveProperty("status");
+    expect(store.body).not.toHaveProperty("categories");
+  });
 
-    await apply(credentials, PRODUCT_URL, proposal);
-    expect(body).not.toHaveProperty("description");
-    expect(body).not.toHaveProperty("short_description");
+  it("does not write body content — sections are applied by hand", async () => {
+    const store = mockStore({ product: productRow });
+    await publish(credentials, PRODUCT_URL, proposal, UPDATE);
+    expect(store.body).not.toHaveProperty("description");
+    expect(store.body).not.toHaveProperty("short_description");
   });
 
   it("uses PUT against the resolved product id", async () => {
-    const spy = mockFetch(okLookup);
-    await apply(credentials, PRODUCT_URL, proposal);
-    const write = spy.mock.calls.find(
+    const store = mockStore({ product: productRow });
+    await publish(credentials, PRODUCT_URL, proposal, UPDATE);
+    const write = store.spy.mock.calls.find(
       ([, init]) => (init as RequestInit | undefined)?.method === "PUT",
     );
     expect(String(write?.[0])).toContain("/wp-json/wc/v3/products/8119");
   });
 
   it("surfaces a write failure rather than reporting success", async () => {
-    mockFetch((url, init) =>
-      init?.method === "PUT"
-        ? new Response("server error", { status: 500 })
-        : Response.json([productRow]),
-    );
-    const result = await apply(credentials, PRODUCT_URL, proposal);
+    mockStore({ product: productRow, writeStatus: 500 });
+    const result = await publish(credentials, PRODUCT_URL, proposal, UPDATE);
     expect(result).toMatchObject({ ok: false });
+  });
+
+  it("succeeds without writing when the store already matches", async () => {
+    const store = mockStore({ product: productRow });
+    const unchanged: OptimizeProposal = {
+      title: { before: "", after: "Wacom STU-430 LCD Signature Pad | UAE" },
+      metaDescription: { before: "", after: "Wacom STU-430 4.5-inch pad." },
+      sections: [],
+      internalLinks: [],
+      notes: "",
+    };
+
+    // Re-publishing something already applied is not a failure; the store is
+    // in the state the recommendation asked for.
+    const result = await publish(credentials, PRODUCT_URL, unchanged, UPDATE);
+    expect(result).toMatchObject({ ok: true, applied: [] });
+    expect(store.bodies).toEqual([]);
+  });
+
+  it("takes a draft live, and never the other way round", async () => {
+    const store = mockStore({ product: { ...productRow, status: "draft" } });
+    await publish(credentials, PRODUCT_URL, proposal, UPDATE);
+    expect(store.body).toMatchObject({ status: "publish" });
+
+    vi.unstubAllGlobals();
+    const live = mockStore({ product: productRow });
+    await publish(credentials, PRODUCT_URL, proposal, UPDATE);
+    expect(live.body).not.toHaveProperty("status");
+  });
+
+  it("files an uncategorised product under its brand", async () => {
+    const store = mockStore({
+      product: {
+        ...productRow,
+        name: "Nitgen eNBioAccess-T9",
+        categories: [
+          { id: 15, name: "Uncategorized", slug: "uncategorized", count: 1 },
+        ],
+      },
+      categories: [
+        { id: 16, name: "Nitgen Biometric Devices", slug: "nitgen-biometric-devices", count: 9 },
+        { id: 44, name: "Nitgen Fingerprint Scanners", slug: "nitgen-fingerprint-scanners", count: 0 },
+      ],
+    });
+
+    await publish(credentials, PRODUCT_URL, proposal, UPDATE);
+    // Joins the nine siblings, not the empty namesake.
+    expect(store.body).toMatchObject({ categories: [{ id: 16 }] });
   });
 });
 
-describe("createDraftProduct (new_page_brief)", () => {
+describe("publish — creating from a new page brief", () => {
   const brief: OptimizeProposal = {
     title: { before: "", after: "ViRDi AC-5000 IK UAE | Outdoor Fingerprint" },
     metaDescription: { before: "", after: "Buy the ViRDi AC-5000 IK in the UAE." },
     h1: { before: "", after: "ViRDi AC-5000 IK — Outdoor Fingerprint Terminal" },
     sections: [
-      { heading: "Product overview", action: "add", after: "<p>Built for harsh sites.</p>" },
+      {
+        heading: "Product overview",
+        action: "add",
+        after: "<p>Built for harsh sites.</p>",
+      },
       { heading: "Key specifications", action: "add", after: "<p>IP65 / IK09</p>" },
     ],
     internalLinks: [],
@@ -257,71 +337,117 @@ describe("createDraftProduct (new_page_brief)", () => {
   };
   const NEW_URL = "https://www.ubio.ae/product/virdi-ac-5000-ik/";
 
-  it("creates as a DRAFT — never live without price, images or SKU", async () => {
-    let body: Record<string, unknown> | null = null;
-    mockFetch((url, init) => {
-      if (init?.method === "POST") {
-        body = JSON.parse(String(init.body)) as Record<string, unknown>;
-        return Response.json({ id: 900, name: "x", permalink: NEW_URL });
-      }
-      return Response.json([]); // nothing at that slug yet
-    });
+  it("creates the product PUBLISHED — approval was the review", async () => {
+    const store = mockStore({ product: null });
+    const result = await publish(credentials, NEW_URL, brief, CREATE);
 
-    const result = await createDraftProduct(credentials, NEW_URL, brief);
-    expect(result.ok).toBe(true);
-    expect(body).toMatchObject({ status: "draft" });
+    expect(result).toMatchObject({ ok: true, mode: "create" });
+    expect(store.body).toMatchObject({ status: "publish" });
   });
 
   it("names the product from the H1, not the SEO title", async () => {
-    let body: Record<string, unknown> | null = null;
-    mockFetch((url, init) => {
-      if (init?.method === "POST") {
-        body = JSON.parse(String(init.body)) as Record<string, unknown>;
-        return Response.json({ id: 900 });
-      }
-      return Response.json([]);
-    });
+    const store = mockStore({ product: null });
+    await publish(credentials, NEW_URL, brief, CREATE);
 
-    await createDraftProduct(credentials, NEW_URL, brief);
     // The SEO title is a search headline; using it as the catalogue name would
     // put marketing copy in the cart and on invoices.
-    expect(body).toMatchObject({
+    expect(store.body).toMatchObject({
       name: "ViRDi AC-5000 IK — Outdoor Fingerprint Terminal",
       slug: "virdi-ac-5000-ik",
     });
-    expect(body).not.toMatchObject({ name: brief.title?.after });
+    expect(store.body).not.toMatchObject({ name: brief.title?.after });
   });
 
   it("sets no price, stock or SKU — a person supplies those", async () => {
-    let body: Record<string, unknown> | null = null;
-    mockFetch((url, init) => {
-      if (init?.method === "POST") {
-        body = JSON.parse(String(init.body)) as Record<string, unknown>;
-        return Response.json({ id: 900 });
-      }
-      return Response.json([]);
-    });
+    const store = mockStore({ product: null });
+    await publish(credentials, NEW_URL, brief, CREATE);
 
-    await createDraftProduct(credentials, NEW_URL, brief);
-    for (const field of ["regular_price", "price", "sku", "stock_quantity", "categories"]) {
-      expect(body).not.toHaveProperty(field);
+    for (const field of ["regular_price", "price", "sku", "stock_quantity"]) {
+      expect(store.body).not.toHaveProperty(field);
     }
   });
 
-  it("refuses to create a duplicate when the slug is taken", async () => {
-    mockFetch(() => Response.json([productRow]));
-    const result = await createDraftProduct(credentials, NEW_URL, brief);
-    expect(result).toMatchObject({ ok: false });
-    if (!result.ok) expect(result.reason).toContain("content_refresh");
+  it("creates the brand category when the store has none", async () => {
+    const store = mockStore({ product: null, categories: [] });
+    await publish(credentials, NEW_URL, brief, CREATE);
+
+    const created = store.spy.mock.calls.find(
+      ([url, init]) =>
+        String(url).includes("/products/categories") &&
+        (init as RequestInit | undefined)?.method === "POST",
+    );
+    expect(JSON.parse(String((created?.[1] as RequestInit).body))).toEqual({
+      name: "ViRDi",
+    });
+    expect(store.body).toMatchObject({ categories: [{ id: 777 }] });
+  });
+
+  it("updates the existing product instead of failing when the slug is taken", async () => {
+    // The bug this replaced: publishing a brief, revising it, then publishing
+    // again refused outright because "a product already exists".
+    const store = mockStore({ product: { ...productRow, status: "draft" } });
+    const result = await publish(credentials, NEW_URL, brief, CREATE);
+
+    expect(result).toMatchObject({ ok: true, mode: "update" });
+    expect(store.body).not.toHaveProperty("name");
+    expect(store.body).toMatchObject({ status: "publish" });
   });
 
   it("refuses a brief with no H1, since there is no product name", async () => {
-    mockFetch(() => Response.json([]));
-    const result = await createDraftProduct(credentials, NEW_URL, {
-      ...brief,
-      h1: undefined,
-    });
+    mockStore({ product: null });
+    const result = await publish(credentials, NEW_URL, { ...brief, h1: undefined }, CREATE);
     expect(result).toMatchObject({ ok: false });
     if (!result.ok) expect(result.reason).toContain("no H1");
+  });
+});
+
+describe("inferBrand", () => {
+  it("takes the brand an agent states over anything guessed", () => {
+    expect(inferBrand({ brand: "UBio" }, "AC-5000 IK Terminal")).toBe("UBio");
+  });
+
+  it("reads the leading word of a product name", () => {
+    expect(inferBrand({}, "ViRDi AC-5000 IK — Outdoor Terminal")).toBe("ViRDi");
+    expect(inferBrand({}, "Nitgen eNBioAccess-T9")).toBe("Nitgen");
+  });
+
+  it("stops at the hyphen that starts a model, but not inside one", () => {
+    // The brand is UBio; UBio-X is a product line.
+    expect(inferBrand({}, "UBio-X Face Pro")).toBe("UBio");
+    // ...while AC-5000 must not become "AC".
+    expect(inferBrand({}, "AC-5000 Fingerprint Reader")).toBe("AC5000");
+  });
+
+  it("returns nothing rather than guess from a name with no brand", () => {
+    expect(inferBrand({}, "The Best Fingerprint Reader")).toBeNull();
+    expect(inferBrand({}, "")).toBeNull();
+  });
+});
+
+describe("matchBrandCategory", () => {
+  const categories: ProductCategory[] = [
+    { id: 16, name: "Nitgen Biometric Devices", slug: "nitgen-biometric-devices", count: 9 },
+    { id: 44, name: "Nitgen Fingerprint Scanners", slug: "nitgen-fingerprint-scanners", count: 0 },
+    { id: 15, name: "Uncategorized", slug: "uncategorized", count: 1 },
+  ];
+
+  it("prefers an exact category over one that merely contains the brand", () => {
+    const exact = [...categories, { id: 90, name: "Nitgen", slug: "nitgen", count: 0 }];
+    expect(matchBrandCategory(exact, "nitgen")?.id).toBe(90);
+  });
+
+  it("falls back to the busiest category containing the brand as a word", () => {
+    expect(matchBrandCategory(categories, "Nitgen")?.id).toBe(16);
+  });
+
+  it("finds nothing for a brand the store has never used", () => {
+    expect(matchBrandCategory(categories, "ViRDi")).toBeNull();
+  });
+
+  it("does not match a brand buried inside a longer word", () => {
+    const misleading: ProductCategory[] = [
+      { id: 5, name: "Interface Panels", slug: "interface-panels", count: 3 },
+    ];
+    expect(matchBrandCategory(misleading, "Face")).toBeNull();
   });
 });

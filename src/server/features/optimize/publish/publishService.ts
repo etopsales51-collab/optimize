@@ -385,6 +385,8 @@ export async function testConnections(
 export type PublishOutcome = {
   ok: boolean;
   reason?: string;
+  /** Whether this touches an existing product or brings a new one into being. */
+  mode?: woocommerce.PublishMode;
   changes?: woocommerce.PlannedChange[];
 };
 
@@ -413,39 +415,14 @@ export async function previewPublish(
     };
   }
 
-  if (recommendation.type === "new_page_brief") {
-    // Nothing exists to diff against, so report the intent instead of a
-    // before/after, and confirm the slug is genuinely free.
-    const clash = await woocommerce.resolveProduct(
-      loaded.credentials,
-      recommendation.targetUrl,
-    );
-    if (clash.ok) {
-      return {
-        ok: false,
-        reason: `A product already exists at that URL (id ${clash.target.id}). Change this to content_refresh rather than creating a duplicate.`,
-      };
-    }
-    return {
-      ok: true,
-      changes: [
-        {
-          field: "rank_math_title",
-          label: "Will CREATE a draft product named",
-          before: "(does not exist)",
-          after: recommendation.proposal.h1?.after ?? "(no H1 in the brief)",
-        },
-      ],
-    };
-  }
-
-  const result = await woocommerce.dryRun(
+  const result = await woocommerce.plan(
     loaded.credentials,
     recommendation.targetUrl,
     recommendation.proposal,
+    { allowCreate: recommendation.type === "new_page_brief" },
   );
   return result.ok
-    ? { ok: true, changes: result.changes }
+    ? { ok: true, mode: result.mode, changes: result.changes }
     : { ok: false, reason: result.reason };
 }
 
@@ -497,20 +474,15 @@ export async function publishApproved(input: {
     execution: { channel: "wp_rest" },
   });
 
-  // A brief has no product to update — it creates one, as a draft. Everything
-  // else edits an existing product's SEO fields.
-  const result =
-    recommendation.type === "new_page_brief"
-      ? await woocommerce.createDraftProduct(
-          loaded.credentials,
-          recommendation.targetUrl,
-          recommendation.proposal,
-        )
-      : await woocommerce.apply(
-          loaded.credentials,
-          recommendation.targetUrl,
-          recommendation.proposal,
-        );
+  // The store decides whether this is a create or an update — see the adapter.
+  // The type only decides whether creating is allowed at all, because only a
+  // brief carries the cannibalization check that makes a new URL safe.
+  const result = await woocommerce.publish(
+    loaded.credentials,
+    recommendation.targetUrl,
+    recommendation.proposal,
+    { allowCreate: recommendation.type === "new_page_brief" },
+  );
 
   if (!result.ok) {
     await OptimizeRepository.updateRecommendation(recommendationId, projectId, {
@@ -543,6 +515,7 @@ export async function publishApproved(input: {
     detail: {
       target: `product/${result.target.id}`,
       productName: result.target.name,
+      mode: result.mode,
       fields: result.applied.map((change) => change.field),
       // The previous values, kept so a bad publish can be undone by hand —
       // WooCommerce keeps no revision history for meta fields.
@@ -554,5 +527,5 @@ export async function publishApproved(input: {
     },
   });
 
-  return { ok: true, changes: result.applied };
+  return { ok: true, mode: result.mode, changes: result.applied };
 }

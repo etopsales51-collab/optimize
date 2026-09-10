@@ -90,7 +90,7 @@ const createInputSchema = {
   projectId: projectIdSchema,
   ...agentIdentitySchema,
   type: z.enum(OPTIMIZE_TYPES).describe(
-    "on_page | content_refresh | meta | internal_links | technical | merge_pages | new_page_brief. Prefer improving an existing URL. new_page_brief is REJECTED unless cannibalizationCheck.status is 'clear' with no overlappingUrls — run analyze_intent_overlap first.",
+    "on_page | content_refresh | meta | internal_links | technical | merge_pages | new_page_brief. Prefer improving an existing URL. new_page_brief is REJECTED unless cannibalizationCheck.status is 'clear' with no overlappingUrls — run analyze_intent_overlap first. Publishing decides create-or-update from the live store, so a brief whose product already exists updates it rather than duplicating it.",
   ),
   priority: z.enum(OPTIMIZE_PRIORITIES).optional().describe("p0 (urgent) to p3. Default p2."),
   targetUrl: z.string().url().describe("The existing page this proposal changes. For merge_pages, the page to KEEP."),
@@ -102,7 +102,7 @@ const createInputSchema = {
     .optional()
     .describe("Why now. Typed pointers into audit / GSC / rank / backlink / competitor data. Staff see these as source chips and links."),
   proposal: optimizeProposalSchema.describe(
-    "The machine-executable change set: before/after for title, metaDescription, h1; sections to add/rewrite/remove; internal links. 'after' copy may use simple HTML (p, h2, h3, ul, li, strong, a).",
+    "The machine-executable change set: before/after for title, metaDescription, h1; sections to add/rewrite/remove; internal links. 'after' copy may use simple HTML (p, h2, h3, ul, li, strong, a). Set 'brand' to the manufacturer (ViRDi, UBio, Nitgen…) so the product is filed under its brand category — it is otherwise guessed from the h1, and a wrong guess files it in the wrong place.",
   ),
   cannibalizationCheck: cannibalizationCheckSchema.describe(
     "REQUIRED. Result of your overlap scan. Paste analyze_intent_overlap's cannibalizationCheck verbatim, or supply your own with the URLs you compared.",

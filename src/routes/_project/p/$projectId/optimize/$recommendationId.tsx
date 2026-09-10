@@ -300,8 +300,10 @@ function OptimizeDetailPage() {
           <div className="rounded-lg border border-base-300 bg-base-100 p-4">
             <h3 className="text-sm font-semibold">Publish to the live site</h3>
             <p className="mt-1 text-sm text-base-content/70">
-              Writes the SEO title and meta description only. The product name,
-              price, stock and status are never changed.
+              Updates the product at this URL, or creates it if there is none.
+              It writes the SEO title, the meta description and the brand
+              category, and takes a draft live. The product name, price, stock
+              and images are never changed.
             </p>
 
             <div className="mt-3 flex flex-wrap gap-2">
@@ -334,19 +336,34 @@ function OptimizeDetailPage() {
 
             {previewMutation.data ? (
               previewMutation.data.ok ? (
-                <ul className="mt-3 space-y-2 text-sm">
-                  {(previewMutation.data.changes ?? []).map((change) => (
-                    <li key={change.field} className="rounded-md bg-base-200/60 p-2">
-                      <p className="text-xs font-medium uppercase tracking-wide text-base-content/50">
-                        {change.label}
-                      </p>
-                      <p className="mt-0.5 text-base-content/60 line-through">
-                        {change.before || "(empty)"}
-                      </p>
-                      <p className="text-success">{change.after}</p>
-                    </li>
-                  ))}
-                </ul>
+                <div className="mt-3 space-y-2 text-sm">
+                  <p className="text-xs font-medium uppercase tracking-wide text-base-content/50">
+                    {previewMutation.data.mode === "create"
+                      ? "Will create a new product"
+                      : "Will update the existing product"}
+                  </p>
+                  {(previewMutation.data.changes ?? []).length === 0 ? (
+                    <p className="text-base-content/60">
+                      Already up to date — publishing would write nothing.
+                    </p>
+                  ) : null}
+                  <ul className="space-y-2">
+                    {(previewMutation.data.changes ?? []).map((change) => (
+                      <li
+                        key={change.field}
+                        className="rounded-md bg-base-200/60 p-2"
+                      >
+                        <p className="text-xs font-medium uppercase tracking-wide text-base-content/50">
+                          {change.label}
+                        </p>
+                        <p className="mt-0.5 text-base-content/60 line-through">
+                          {change.before || "(empty)"}
+                        </p>
+                        <p className="text-success">{change.after}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               ) : (
                 <p className="mt-3 text-sm text-warning">
                   {previewMutation.data.reason}

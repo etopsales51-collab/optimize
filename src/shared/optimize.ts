@@ -199,6 +199,11 @@ export const optimizeProposalSchema = z.object({
     )
     .max(60)
     .default([]),
+  // The brand this product belongs to, e.g. "ViRDi", "UBio", "Nitgen". Used to
+  // file a newly created product under its brand category instead of
+  // Uncategorized. Optional: when absent it is inferred from the H1, but an
+  // agent that knows the brand should say so rather than leave it to a guess.
+  brand: z.string().max(80).optional(),
   notes: z.string().max(5000).default(""),
 });
 export type OptimizeProposal = z.infer<typeof optimizeProposalSchema>;
