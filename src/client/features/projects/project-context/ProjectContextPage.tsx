@@ -1,8 +1,12 @@
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Pencil } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Globe, Pencil } from "lucide-react";
+import { toast } from "sonner";
 import { getStandardErrorMessage } from "@/client/lib/error-messages";
-import { getProjectContext } from "@/serverFunctions/projectContext";
+import {
+  autofillProjectContext,
+  getProjectContext,
+} from "@/serverFunctions/projectContext";
 import {
   PROJECT_CONTEXT_SECTION_KEYS,
   PROJECT_CONTEXT_SECTION_LABELS,
@@ -117,10 +121,38 @@ function ProseSections({
   missingSections: ProjectContextData["missingSections"];
 }) {
   const update = useContextUpdate(projectId);
+  const queryClient = useQueryClient();
   const stored = new Map(sections.map((section) => [section.key, section]));
   // Only the fields the user actually touched are pinned locally; the rest
   // render straight from the query, so a write from SAM shows up on refetch.
   const [drafts, setDrafts] = React.useState<Record<string, string>>({});
+
+  // Reads the project's own site and fills only the fields that are empty.
+  // It never overwrites anything here, so it is safe to press at any time; a
+  // pinned draft in a filled field simply stays pinned.
+  const autofill = useMutation({
+    mutationFn: () => autofillProjectContext({ data: { projectId } }),
+    onSuccess: (result) => {
+      queryClient.setQueryData(projectContextQueryKey(projectId), result.context);
+      const label = (key: string) =>
+        key === "key_pages"
+          ? "Key pages"
+          : PROJECT_CONTEXT_SECTION_LABELS[key as ProjectContextSectionKey] ?? key;
+      if (result.filled.length > 0) {
+        toast.success(
+          `Filled from ${result.source === "firecrawl" ? "Firecrawl" : "the site"}: ${result.filled.map(label).join(", ")}.`,
+        );
+      }
+      if (result.left.length > 0) {
+        toast.message(`Left for you: ${result.left.map(label).join(", ")}.`);
+      }
+      for (const warning of result.warnings) toast.warning(warning);
+    },
+    onError: (error) =>
+      toast.error(getStandardErrorMessage(error, "Could not read the website.")),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: projectContextQueryKey(projectId) }),
+  });
 
   const draftOf = (key: ProjectContextSectionKey) =>
     drafts[key] ?? stored.get(key)?.content ?? "";
@@ -210,7 +242,22 @@ function ProseSections({
         );
       })}
 
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="btn btn-sm gap-1.5"
+            disabled={autofill.isPending || update.isPending}
+            onClick={() => autofill.mutate()}
+            title="Reads your domain and fills only the empty fields. Nothing you wrote is changed."
+          >
+            <Globe className="size-4" />
+            {autofill.isPending ? "Reading the site…" : "Fill from website"}
+          </button>
+          <span className="text-xs text-base-content/50">
+            Fills empty fields only.
+          </span>
+        </div>
         <button
           type="submit"
           className="btn btn-primary btn-sm"
