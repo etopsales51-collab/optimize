@@ -317,6 +317,34 @@ describe("publish — updating an existing product", () => {
     // Joins the nine siblings, not the empty namesake.
     expect(store.body).toMatchObject({ categories: [{ id: 16 }] });
   });
+
+  it("uses the brand the agent stated, not one guessed from the name", async () => {
+    const store = mockStore({
+      product: {
+        ...productRow,
+        name: "AC-5000 IK Outdoor Terminal",
+        categories: [],
+      },
+      categories: [],
+    });
+
+    await publish(
+      credentials,
+      PRODUCT_URL,
+      { ...proposal, brand: "ViRDi" },
+      UPDATE,
+    );
+
+    const created = store.spy.mock.calls.find(
+      ([url, init]) =>
+        String(url).includes("/products/categories") &&
+        (init as RequestInit | undefined)?.method === "POST",
+    );
+    // Guessing from this name would have invented a category called "AC5000".
+    expect(JSON.parse(String((created?.[1] as RequestInit).body))).toEqual({
+      name: "ViRDi",
+    });
+  });
 });
 
 describe("publish — creating from a new page brief", () => {

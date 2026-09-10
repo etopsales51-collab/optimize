@@ -731,6 +731,7 @@ async function updateProduct(
   credentials: WooCredentials,
   target: ResolvedProduct,
   changes: PlannedChange[],
+  proposal: OptimizeProposal,
 ): Promise<ApplyResult> {
   // Allowlist, built field by field. Nothing else can enter this body — in
   // particular no name, price, stock_status, sku or images.
@@ -754,7 +755,9 @@ async function updateProduct(
   const categoryChange = changes.find((change) => change.field === "categories");
   let categoryNote = "";
   if (categoryChange && needsBrandCategory(target)) {
-    const brand = inferBrand({ brand: undefined }, target.name);
+    // Same inputs the plan used, so the preview and the write cannot disagree
+    // about which brand this is.
+    const brand = inferBrand(proposal, target.name);
     const resolved = brand ? await ensureBrandCategory(credentials, brand) : null;
     if (resolved?.ok) {
       // Replacing the whole set is the intent here: the only thing being
@@ -815,5 +818,5 @@ export async function publish(
 
   const target = await resolveProduct(credentials, targetUrl);
   if (!target.ok) return { ok: false, reason: target.reason };
-  return updateProduct(credentials, target.target, planned.changes);
+  return updateProduct(credentials, target.target, planned.changes, proposal);
 }
