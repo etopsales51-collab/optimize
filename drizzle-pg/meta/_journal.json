@@ -176,6 +176,13 @@
       "when": 1788959943571,
       "tag": "0024_normal_korvac",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1789373059841,
+      "tag": "0025_cute_mach_iv",
+      "breakpoints": true
     }
   ]
 }

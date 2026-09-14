@@ -330,6 +330,13 @@
       "when": 1788959942105,
       "tag": "0046_greedy_hulk",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "6",
+      "when": 1789373046676,
+      "tag": "0047_greedy_masked_marvel",
+      "breakpoints": true
     }
   ]
 }

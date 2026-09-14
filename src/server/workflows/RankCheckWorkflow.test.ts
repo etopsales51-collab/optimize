@@ -47,6 +47,11 @@ vi.mock("@/server/workflows/pgStep", () => ({
 vi.mock("@/server/lib/dataforseo", () => ({
   createDataforseoClient: mocks.createDataforseoClient,
 }));
+// Notifications are a side channel with their own tests; the workflow only
+// has to call them, and their import chain needs a real Workers env.
+vi.mock("@/server/features/whatsapp/whatsappAlerts", () => ({
+  alertKeywordDrops: vi.fn(async () => {}),
+}));
 vi.mock("@/server/lib/posthog", () => ({
   captureServerEvent: mocks.captureServerEvent,
 }));

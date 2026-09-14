@@ -80,6 +80,10 @@ import {
   runSiteAuditTool,
 } from "@/server/mcp/tools/site-audit-tools";
 import { whoamiTool } from "@/server/mcp/tools/whoami";
+import {
+  listWhatsappMessagesTool,
+  sendWhatsappMessageTool,
+} from "@/server/mcp/tools/whatsapp-tools";
 
 type ToolSchema = z.ZodType | z.ZodRawShape;
 
@@ -225,6 +229,8 @@ export function createOpenSeoMcpServer(authProps: McpProps) {
   register(getOptimizeRecommendationTool);
   register(addOptimizeCommentTool);
   register(listOptimizeCommentsTool);
+  register(listWhatsappMessagesTool);
+  register(sendWhatsappMessageTool);
   register(listAccessibleModulesTool);
   register(requestModuleAccessTool);
 

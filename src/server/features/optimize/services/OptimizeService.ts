@@ -13,7 +13,9 @@
  * trusted from the caller, and preview markup is sanitized before storage.
  */
 import { AppError } from "@/server/lib/errors";
+import { alertApprovalNeeded } from "@/server/features/whatsapp/whatsappAlerts";
 import {
+  OPTIMIZE_TYPE_LABELS,
   canApprove,
   canTransition,
   createRecommendationSchema,
@@ -155,6 +157,16 @@ async function createRecommendation(input: {
 
   await recordCopyRemovals(id, actorKey(input.actor), removals);
 
+  if (data.status === "pending_approval") {
+    await alertApprovalNeeded({
+      recommendationId: id,
+      projectId: input.projectId,
+      typeLabel: OPTIMIZE_TYPE_LABELS[data.type],
+      targetUrl: data.targetUrl,
+      submittedBy: input.actor.label,
+    });
+  }
+
   return { id, removals };
 }
 
@@ -279,6 +291,18 @@ async function updateRecommendation(input: {
 
   const removals = cleaned?.removals ?? [];
   await recordCopyRemovals(input.id, actorKey(input.actor), removals);
+
+  // A revision staff asked for is back in the queue: tell them it is ready.
+  if (nextStatus === "pending_approval") {
+    await alertApprovalNeeded({
+      recommendationId: input.id,
+      projectId: input.projectId,
+      typeLabel: OPTIMIZE_TYPE_LABELS[patch.type ?? existing.type],
+      targetUrl: patch.targetUrl ?? existing.targetUrl,
+      submittedBy: input.actor.label,
+      revisionKey: crypto.randomUUID(),
+    });
+  }
 
   return { removals };
 }

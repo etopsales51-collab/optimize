@@ -6,6 +6,7 @@ import { openSecret, sealSecret } from "@/server/lib/secret-box";
 import { isExecutable } from "@/shared/optimize";
 import { OptimizeRepository } from "../repositories/OptimizeRepository";
 import * as woocommerce from "./woocommerceAdapter";
+import { alertPublishResult } from "@/server/features/whatsapp/whatsappAlerts";
 
 /**
  * Turns an approved recommendation into a live change.
@@ -573,6 +574,14 @@ export async function publishApproved(input: {
       actor: actorKey,
       detail: { reason: result.reason },
     });
+    await alertPublishResult({
+      recommendationId,
+      projectId,
+      targetUrl: recommendation.targetUrl,
+      ok: false,
+      reason: result.reason,
+      attemptKey: crypto.randomUUID(),
+    });
     return { ok: false, reason: result.reason };
   }
 
@@ -602,6 +611,13 @@ export async function publishApproved(input: {
       })),
       revisionHint: result.revisionHint,
     },
+  });
+  await alertPublishResult({
+    recommendationId,
+    projectId,
+    targetUrl: recommendation.targetUrl,
+    ok: true,
+    attemptKey: crypto.randomUUID(),
   });
 
   return { ok: true, mode: result.mode, changes: result.applied };

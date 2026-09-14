@@ -16,6 +16,7 @@ import {
 import { pgStep } from "@/server/workflows/pgStep";
 import { createDataforseoClient } from "@/server/lib/dataforseo";
 import { captureServerEvent } from "@/server/lib/posthog";
+import { alertKeywordDrops } from "@/server/features/whatsapp/whatsappAlerts";
 import { AppError } from "@/server/lib/errors";
 import { autumn } from "@/server/billing/autumn";
 import {
@@ -190,6 +191,13 @@ async function finalizeRankCheckRun(input: {
   await RankTrackingRepository.updateConfig(input.configId, input.projectId, {
     lastCheckedAt: nowIso,
     lastSkipReason: null,
+  });
+
+  // Compared against the previous completed run; silent when nothing fell.
+  await alertKeywordDrops({
+    runId: input.runId,
+    configId: input.configId,
+    projectId: input.projectId,
   });
 
   // One-line summary per run so fallback rates are visible in Workers Logs.

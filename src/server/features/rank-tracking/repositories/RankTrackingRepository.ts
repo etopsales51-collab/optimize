@@ -252,6 +252,26 @@ async function getLatestRunForConfig(configId: string) {
 }
 
 /**
+ * The last completed run for a config before the given one — the baseline a
+ * finished check is compared against for keyword-drop alerts.
+ */
+async function getPreviousCompletedRun(configId: string, excludeRunId: string) {
+  const rows = await db
+    .select()
+    .from(rankCheckRuns)
+    .where(
+      and(
+        eq(rankCheckRuns.configId, configId),
+        eq(rankCheckRuns.status, "completed"),
+        ne(rankCheckRuns.id, excludeRunId),
+      ),
+    )
+    .orderBy(desc(rankCheckRuns.completedAt))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/**
  * Returns the currently active (pending or running) run for a config, if any.
  * At most one such row exists, enforced by the partial unique index.
  */
@@ -476,6 +496,7 @@ export const RankTrackingRepository = {
   updateRun,
   getRunById,
   getLatestRunForConfig,
+  getPreviousCompletedRun,
   getActiveRunForConfig,
   insertSnapshots,
   getSnapshotsForRun,

@@ -6,6 +6,7 @@ import {
   Globe,
   LayoutDashboard,
   Link2,
+  MessageCircle,
   MessageSquare,
   Search,
   Sparkles,
@@ -73,6 +74,11 @@ const projectNavItems = [
     label: "Optimize",
     icon: Wand2,
   },
+  {
+    to: "/p/$projectId/whatsapp" as const,
+    label: "WhatsApp",
+    icon: MessageCircle,
+  },
 ] as const;
 
 const aiNavItem = linkOptions({
@@ -122,7 +128,10 @@ export function getProjectNavGroups(projectId: string) {
     },
     {
       label: "Content",
-      items: [byPath("/p/$projectId/optimize")],
+      items: [
+        byPath("/p/$projectId/optimize"),
+        byPath("/p/$projectId/whatsapp"),
+      ],
     },
     {
       label: "My Site",

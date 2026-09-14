@@ -20,6 +20,7 @@ import { runMultipageChecks } from "@/server/lib/audit/issues/multipage";
 import type { DetectedIssue } from "@/server/lib/audit/issues/page-reporters";
 import type { AuditConfig } from "@/server/lib/audit/types";
 import { captureServerEvent } from "@/server/lib/posthog";
+import { alertAuditFinished } from "@/server/features/whatsapp/whatsappAlerts";
 import {
   runCrawlPhase,
   type CrawlPhaseResult,
@@ -375,6 +376,8 @@ async function finalizeAudit(args: {
       },
     });
     await AuditProgressKV.clear(auditId);
+    // Only critical issues reach WhatsApp; silent otherwise.
+    await alertAuditFinished({ auditId, projectId });
     // Crawl scratch state (frontier, links, mirror) is no longer needed.
     await getAuditScratchpad(auditId).destroy();
   });
