@@ -6,6 +6,7 @@ import { openSecret, sealSecret } from "@/server/lib/secret-box";
 import { isExecutable } from "@/shared/optimize";
 import { OptimizeRepository } from "../repositories/OptimizeRepository";
 import * as woocommerce from "./woocommerceAdapter";
+import * as wordpress from "./wordpressAdapter";
 import { alertPublishResult } from "@/server/features/whatsapp/whatsappAlerts";
 
 /**
@@ -167,57 +168,102 @@ export async function saveSettings(input: {
     );
 }
 
-/** A /product/ URL is WooCommerce; everything else is treated as a page. */
-export function channelForUrl(
-  url: string,
-  settings: { pagesChannel: string; productsChannel: string },
-): string {
-  let isProduct = false;
+/** A URL with a /product/ segment is a WooCommerce product; anything else is a page or post. */
+export function isProductUrl(url: string): boolean {
   try {
-    isProduct = new URL(url).pathname.split("/").filter(Boolean).includes("product");
+    return new URL(url).pathname.split("/").filter(Boolean).includes("product");
   } catch {
-    isProduct = false;
+    return false;
   }
-  return isProduct ? settings.productsChannel : settings.pagesChannel;
 }
 
+type PublishTarget =
+  | { adapter: "woocommerce"; credentials: woocommerce.WooCredentials }
+  | { adapter: "wordpress"; credentials: wordpress.WordpressCredentials };
+
 /**
- * Load the WooCommerce credentials, which is what the implemented channel
- * (product SEO meta) needs. Each failure returns the specific thing to fix,
- * because "publishing failed" with no reason is the least useful message a
- * settings screen can give.
+ * Pick the adapter for this URL and load its credentials. Each failure returns
+ * the specific thing to fix, because "publishing failed" with no reason is the
+ * least useful message a settings screen can give.
+ *
+ * Products go through WooCommerce, pages and posts through WordPress. For
+ * pages, the saved WordPress application password is the switch: the stored
+ * `pagesChannel` defaulted to "manual" with no screen to change it, so it is
+ * not read as a choice anyone made. Only NovaMira, still unbuilt, stops it.
  */
-async function loadCredentials(projectId: string) {
+async function loadPublishTarget(
+  projectId: string,
+  targetUrl: string,
+): Promise<PublishTarget | { error: string }> {
   const row = await getRow(projectId);
   if (!row?.publishingEnabled) {
     return {
       error:
         "Publishing is switched off for this project. Turn it on in Project settings → Publishing once the connection is set up.",
-    } as const;
+    };
   }
-  if (!row.wordpressBaseUrl || !row.wooConsumerKey || !row.wooConsumerSecretSealed) {
+  if (!row.wordpressBaseUrl) {
     return {
-      error:
-        "WooCommerce is not connected for this project. Add the store URL, consumer key and consumer secret in Project settings → Publishing.",
-    } as const;
+      error: "No site URL is saved for this project. Add it in Project settings → Publishing.",
+    };
   }
 
-  const consumerSecret = await openSecret(row.wooConsumerSecretSealed);
-  if (!consumerSecret) {
+  if (isProductUrl(targetUrl)) {
+    if (row.productsChannel !== "wp_rest") {
+      return {
+        error:
+          row.productsChannel === "novamira"
+            ? "Product URLs route to NovaMira, which is not connected yet."
+            : "Product URLs are set to be applied by hand for this project.",
+      };
+    }
+    if (!row.wooConsumerKey || !row.wooConsumerSecretSealed) {
+      return {
+        error:
+          "WooCommerce is not connected for this project. Add the consumer key and consumer secret in Project settings → Publishing.",
+      };
+    }
+    const consumerSecret = await openSecret(row.wooConsumerSecretSealed);
+    if (!consumerSecret) {
+      return {
+        error:
+          "The stored WooCommerce secret could not be read — it was encrypted under a different BETTER_AUTH_SECRET. Re-enter it in Project settings → Publishing.",
+      };
+    }
     return {
-      error:
-        "The stored WooCommerce secret could not be read — it was encrypted under a different BETTER_AUTH_SECRET. Re-enter it in Project settings → Publishing.",
-    } as const;
+      adapter: "woocommerce",
+      credentials: {
+        baseUrl: row.wordpressBaseUrl,
+        consumerKey: row.wooConsumerKey,
+        consumerSecret,
+      },
+    };
   }
 
+  if (row.pagesChannel === "novamira") {
+    return { error: "Pages and posts route to NovaMira, which is not connected yet." };
+  }
+  if (!row.wpUsername || !row.wpAppPasswordSealed) {
+    return {
+      error:
+        "This URL is a page or blog post, not a product, so it publishes through WordPress. Add a WordPress username and application password (an Editor account) in Project settings → Publishing.",
+    };
+  }
+  const appPassword = await openSecret(row.wpAppPasswordSealed);
+  if (!appPassword) {
+    return {
+      error:
+        "The stored WordPress application password could not be read — it was encrypted under a different BETTER_AUTH_SECRET. Re-enter it in Project settings → Publishing.",
+    };
+  }
   return {
-    row,
+    adapter: "wordpress",
     credentials: {
       baseUrl: row.wordpressBaseUrl,
-      consumerKey: row.wooConsumerKey,
-      consumerSecret,
+      username: row.wpUsername,
+      appPassword,
     },
-  } as const;
+  };
 }
 
 /**
@@ -460,13 +506,34 @@ export async function inspectProductFields(
   };
 }
 
+export type PublishChange = {
+  field: string;
+  label: string;
+  before: string;
+  after: string;
+};
+
 export type PublishOutcome = {
   ok: boolean;
   reason?: string;
-  /** Whether this touches an existing product or brings a new one into being. */
-  mode?: woocommerce.PublishMode;
-  changes?: woocommerce.PlannedChange[];
+  /** Whether this touches an existing item or brings a new one into being. */
+  mode?: "create" | "update";
+  /** What is being published, for the UI's wording. */
+  kind?: "product" | "post" | "page";
+  changes?: PublishChange[];
 };
+
+type Recommendation = NonNullable<
+  Awaited<ReturnType<typeof OptimizeRepository.getRecommendation>>
+>;
+
+function adapterOptions(recommendation: Recommendation) {
+  return {
+    // Only a brief carries the cannibalization check that makes a new URL safe.
+    allowCreate: recommendation.type === "new_page_brief",
+    focusKeyword: recommendation.primaryQuery,
+  };
+}
 
 /** What would happen, touching nothing. Safe to call at any time. */
 export async function previewPublish(
@@ -479,29 +546,85 @@ export async function previewPublish(
   );
   if (!recommendation) throw new AppError("NOT_FOUND", "Recommendation not found.");
 
-  const loaded = await loadCredentials(projectId);
-  if ("error" in loaded) return { ok: false, reason: loaded.error };
+  const target = await loadPublishTarget(projectId, recommendation.targetUrl);
+  if ("error" in target) return { ok: false, reason: target.error };
 
-  const channel = channelForUrl(recommendation.targetUrl, loaded.row);
-  if (channel !== "wp_rest") {
-    return {
-      ok: false,
-      reason:
-        channel === "novamira"
-          ? "This URL routes to NovaMira, which is not connected yet. Switch the channel to WordPress REST, or apply this one by hand."
-          : "This URL's channel is set to manual, so it is applied by hand.",
-    };
+  if (target.adapter === "wordpress") {
+    const result = await wordpress.plan(
+      target.credentials,
+      recommendation.targetUrl,
+      recommendation.proposal,
+      adapterOptions(recommendation),
+    );
+    return result.ok
+      ? { ok: true, mode: result.mode, kind: result.kind, changes: result.changes }
+      : { ok: false, reason: result.reason };
   }
 
   const result = await woocommerce.plan(
-    loaded.credentials,
+    target.credentials,
     recommendation.targetUrl,
     recommendation.proposal,
-    { allowCreate: recommendation.type === "new_page_brief" },
+    adapterOptions(recommendation),
   );
   return result.ok
-    ? { ok: true, mode: result.mode, changes: result.changes }
+    ? { ok: true, mode: result.mode, kind: "product", changes: result.changes }
     : { ok: false, reason: result.reason };
+}
+
+type AppliedPublish = {
+  mode: "create" | "update";
+  kind: "product" | "post" | "page";
+  externalId: string;
+  name: string;
+  applied: PublishChange[];
+  revisionHint: string;
+};
+
+async function applyPublish(
+  target: PublishTarget,
+  recommendation: Recommendation,
+): Promise<{ ok: true; result: AppliedPublish } | { ok: false; reason: string }> {
+  if (target.adapter === "wordpress") {
+    const result = await wordpress.publish(
+      target.credentials,
+      recommendation.targetUrl,
+      recommendation.proposal,
+      adapterOptions(recommendation),
+    );
+    if (!result.ok) return result;
+    return {
+      ok: true,
+      result: {
+        mode: result.mode,
+        kind: result.target.kind,
+        externalId: `${result.target.kind}/${result.target.id}`,
+        name: result.target.title,
+        applied: result.applied,
+        revisionHint: result.revisionHint,
+      },
+    };
+  }
+
+  // The store decides whether this is a create or an update — see the adapter.
+  const result = await woocommerce.publish(
+    target.credentials,
+    recommendation.targetUrl,
+    recommendation.proposal,
+    adapterOptions(recommendation),
+  );
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    result: {
+      mode: result.mode,
+      kind: "product",
+      externalId: `product/${result.target.id}`,
+      name: result.target.name,
+      applied: result.applied,
+      revisionHint: result.revisionHint,
+    },
+  };
 }
 
 /**
@@ -533,64 +656,46 @@ export async function publishApproved(input: {
     );
   }
 
-  const loaded = await loadCredentials(projectId);
-  if ("error" in loaded) return { ok: false, reason: loaded.error };
-
-  const channel = channelForUrl(recommendation.targetUrl, loaded.row);
-  if (channel !== "wp_rest") {
-    return {
-      ok: false,
-      reason:
-        channel === "novamira"
-          ? "This URL routes to NovaMira, which is not connected yet."
-          : "This URL's channel is set to manual.",
-    };
-  }
+  const target = await loadPublishTarget(projectId, recommendation.targetUrl);
+  if ("error" in target) return { ok: false, reason: target.error };
 
   await OptimizeRepository.updateRecommendation(recommendationId, projectId, {
     status: "running",
     execution: { channel: "wp_rest" },
   });
 
-  // The store decides whether this is a create or an update — see the adapter.
-  // The type only decides whether creating is allowed at all, because only a
-  // brief carries the cannibalization check that makes a new URL safe.
-  const result = await woocommerce.publish(
-    loaded.credentials,
-    recommendation.targetUrl,
-    recommendation.proposal,
-    { allowCreate: recommendation.type === "new_page_brief" },
-  );
+  const outcome = await applyPublish(target, recommendation);
 
-  if (!result.ok) {
+  if (!outcome.ok) {
     await OptimizeRepository.updateRecommendation(recommendationId, projectId, {
       status: "failed",
-      execution: { channel: "wp_rest", dryRunOk: false, error: result.reason },
+      execution: { channel: "wp_rest", dryRunOk: false, error: outcome.reason },
     });
     await OptimizeRepository.addJobEvent({
       id: crypto.randomUUID(),
       recommendationId,
       eventType: "publish_failed",
       actor: actorKey,
-      detail: { reason: result.reason },
+      detail: { reason: outcome.reason },
     });
     await alertPublishResult({
       recommendationId,
       projectId,
       targetUrl: recommendation.targetUrl,
       ok: false,
-      reason: result.reason,
+      reason: outcome.reason,
       attemptKey: crypto.randomUUID(),
     });
-    return { ok: false, reason: result.reason };
+    return { ok: false, reason: outcome.reason };
   }
 
+  const { result } = outcome;
   await OptimizeRepository.updateRecommendation(recommendationId, projectId, {
     status: "succeeded",
     execution: {
       channel: "wp_rest",
       dryRunOk: true,
-      externalJobId: `product/${result.target.id}`,
+      externalJobId: result.externalId,
     },
   });
   await OptimizeRepository.addJobEvent({
@@ -599,12 +704,12 @@ export async function publishApproved(input: {
     eventType: "published",
     actor: actorKey,
     detail: {
-      target: `product/${result.target.id}`,
-      productName: result.target.name,
+      target: result.externalId,
+      name: result.name,
       mode: result.mode,
       fields: result.applied.map((change) => change.field),
       // The previous values, kept so a bad publish can be undone by hand —
-      // WooCommerce keeps no revision history for meta fields.
+      // neither WooCommerce nor Rank Math keeps revision history for meta.
       previous: result.applied.map((change) => ({
         field: change.field,
         before: change.before,
@@ -620,5 +725,5 @@ export async function publishApproved(input: {
     attemptKey: crypto.randomUUID(),
   });
 
-  return { ok: true, mode: result.mode, changes: result.applied };
+  return { ok: true, mode: result.mode, kind: result.kind, changes: result.applied };
 }

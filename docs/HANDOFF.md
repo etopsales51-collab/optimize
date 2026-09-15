@@ -488,6 +488,25 @@ false confidence.
 - A dedicated WordPress Editor account, `deepinsights-bot`, was set up for the
   pages/posts channel. Editor cannot reach orders, customers or settings.
 
+### 6.5b Publishing pages and blog posts (WordPress)
+
+- Any target URL without a `/product/` segment publishes through
+  `publish/wordpressAdapter.ts` using the project's WordPress username and
+  application password (Editor role). Routing is in `loadPublishTarget` in
+  `publishService.ts`. The saved application password is the switch; the old
+  `pagesChannel` "manual" default is ignored (no screen ever set it), and only
+  `novamira` blocks.
+- Resolves the last path segment as a post slug, then a page slug, drafts
+  included. Existing item: writes Rank Math title, description and focus
+  keyword (`primaryQuery`) via `rankmath/v1/updateMeta`, and draft to publish.
+  Never its title or body.
+- New brief: post if the URL sits where the site puts posts (read from its
+  newest post link), top-level page otherwise, nested page refused. Title from
+  the H1, body from the sections, published, filed under an existing category
+  that matches the brief's words (never creates one), then Rank Math fields.
+- No Rank Math: the post still publishes and the result says SEO fields were
+  not written.
+
 ### 6.6 Publishing credentials (per project)
 
 - Table `project_publish_settings` (`src/db/publish.schema.ts` + pg), **one row

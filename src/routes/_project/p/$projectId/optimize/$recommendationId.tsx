@@ -345,10 +345,11 @@ function OptimizeDetailPage() {
           <div className="rounded-lg border border-base-300 bg-base-100 p-4">
             <h3 className="text-sm font-semibold">Publish to the live site</h3>
             <p className="mt-1 text-sm text-base-content/70">
-              Updates the product at this URL, or creates it if there is none.
-              It writes the SEO title, the meta description and the brand
-              category, and takes a draft live. The product name, price, stock
-              and images are never changed.
+              Updates what is at this URL, or creates it if there is none: a
+              product through WooCommerce, a page or blog post through
+              WordPress. It writes the SEO title, meta description and focus
+              keyword, and takes a draft live. An existing item keeps its name,
+              body, price, stock and images.
             </p>
 
             <div className="mt-3 flex flex-wrap gap-2">
@@ -384,8 +385,8 @@ function OptimizeDetailPage() {
                 <div className="mt-3 space-y-2 text-sm">
                   <p className="text-xs font-medium uppercase tracking-wide text-base-content/50">
                     {previewMutation.data.mode === "create"
-                      ? "Will create a new product"
-                      : "Will update the existing product"}
+                      ? `Will create a new ${previewMutation.data.kind ?? "product"}`
+                      : `Will update the existing ${previewMutation.data.kind ?? "product"}`}
                   </p>
                   {(previewMutation.data.changes ?? []).length === 0 ? (
                     <p className="text-base-content/60">

@@ -119,8 +119,11 @@ function PublishingSettingsPage() {
     return <div className="h-40 animate-pulse rounded-lg bg-base-200" />;
   }
 
-  const wooReady =
-    data.wooCredentialStatus === "ok" && Boolean(data.wordpressBaseUrl);
+  // Either connection is enough: a site without WooCommerce still publishes
+  // its pages and posts.
+  const connectionReady =
+    Boolean(data.wordpressBaseUrl) &&
+    (data.wooCredentialStatus === "ok" || data.wpCredentialStatus === "ok");
 
   return (
     <div className="space-y-6">
@@ -207,8 +210,8 @@ function PublishingSettingsPage() {
           <StatusPill status={data.wpCredentialStatus} />
         </div>
         <p className="text-xs text-base-content/60">
-          Optional today; needed once recommendations target pages or blog
-          posts. Use an application password on a dedicated user with the{" "}
+          Needed to publish pages and blog posts (any URL that is not a
+          product). Use an application password on a dedicated user with the{" "}
           <strong>Editor</strong> role — that role cannot reach orders,
           customers or settings, which is the scoping a WooCommerce key cannot
           give you.
@@ -248,14 +251,14 @@ function PublishingSettingsPage() {
             checked={enabled}
             onChange={(event) => setEnabled(event.target.checked)}
             className="checkbox checkbox-sm mt-0.5"
-            disabled={!wooReady && !enabled}
+            disabled={!connectionReady && !enabled}
           />
           <span className="text-sm">
             Let approved recommendations write to the live site
             <span className="mt-0.5 block text-xs text-base-content/60">
-              {wooReady
+              {connectionReady
                 ? "Approving still does not publish on its own — publishing is a separate, deliberate action on each item."
-                : "Add the site URL and a working WooCommerce key before switching this on."}
+                : "Add the site URL and a WooCommerce key or WordPress application password before switching this on."}
             </span>
           </span>
         </label>

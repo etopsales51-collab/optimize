@@ -461,7 +461,7 @@ function hasSeoContent(proposal: OptimizeProposal): boolean {
   );
 }
 
-function buildDescription(proposal: OptimizeProposal): string {
+export function buildDescription(proposal: OptimizeProposal): string {
   return (proposal.sections ?? [])
     .filter((section) => section.action !== "remove" && section.after?.trim())
     .map((section) =>
