@@ -39,6 +39,7 @@ import { createProjectTool } from "@/server/mcp/tools/create-project";
 import { listProjectsTool } from "@/server/mcp/tools/list-projects";
 import {
   addOptimizeCommentTool,
+  uploadOptimizeImageTool,
   analyzeIntentOverlapTool,
   createOptimizeRecommendationTool,
   getOptimizeRecommendationTool,
@@ -249,6 +250,7 @@ export function createOpenSeoMcpServer(authProps: McpProps) {
   register(listOptimizeRecommendationsTool);
   register(getOptimizeRecommendationTool);
   register(addOptimizeCommentTool);
+  register(uploadOptimizeImageTool);
   register(listOptimizeCommentsTool);
   register(listWhatsappMessagesTool);
   register(sendWhatsappMessageTool);

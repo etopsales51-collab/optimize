@@ -40,6 +40,9 @@ function mockSite(options: { existing?: Record<string, unknown> | null }) {
     "fetch",
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (init?.method === "POST" && typeof init.body !== "string") {
+        return Response.json({ id: 55, source_url: "https://www.etopme.ae/wp-content/uploads/scan.png" });
+      }
       if (init?.method === "POST") {
         const body = JSON.parse(String(init.body)) as Record<string, unknown>;
         writes.push({ url, body });
@@ -91,6 +94,33 @@ describe("wordpress publish", () => {
         },
       },
     });
+  });
+
+  it("uploads the images, sets the hero as featured image and mounts the rest in the body", async () => {
+    const writes = mockSite({ existing: null });
+    const result = await publish(
+      credentials,
+      TARGET,
+      {
+        ...proposal,
+        images: [
+          { slotId: "hero", role: "hero", alt: "Hero", assetId: "8f7c1a52-5b0e-4d7e-9a61-2f4a0e1c9b11" },
+          { slotId: "scan-ui", role: "inline", alt: "Scan", assetId: "1b2c3d4e-5f60-4718-8293-a4b5c6d7e8f9", afterSection: 0 },
+          { slotId: "export", role: "inline", alt: "Export", prompt: "Export to sheet" },
+        ],
+      },
+      {
+        allowCreate: true,
+        loadImage: async () => ({ bytes: new ArrayBuffer(8), contentType: "image/png" }),
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    const post = writes.find((write) => write.url.endsWith("/wp/v2/posts"));
+    expect(post?.body.featured_media).toBe(55);
+    expect(String(post?.body.content)).toContain("wp-content/uploads/scan.png");
+    // The empty slot has nothing to publish and leaves no placeholder behind.
+    expect(String(post?.body.content)).not.toContain("Export to sheet");
   });
 
   it("never rewrites an existing post's title or body, only its SEO fields and draft status", async () => {

@@ -179,6 +179,36 @@ Grok can now post into Optimize. Nine tools, all credit-free:
 | `add_optimize_comment` / `list_optimize_comments` | The in-UI conversation, both directions. |
 | `list_accessible_modules` / `request_module_access` | Declare what a routine will read; logged with agent identity. Lists every module, including `brand_lookup`, `prompt_explorer`, `research_runs` and `whatsapp`. |
 
+### Articles and blog posts, with images
+
+For a `new_page_brief` whose URL is not a product, send the COMPLETE post, not
+a brief. Staff read it in **Open article**, a rendered view of the finished
+post, and Approve is refused until it has an `h1` and body sections.
+
+- `proposal.h1.after`: the post title.
+- `proposal.sections[]`: every section in reading order, `heading` plus full
+  HTML in `after` (p, h3, ul, table, strong, a).
+- `proposal.images[]`: `{slotId, role, url or assetId, alt, caption?,
+  afterSection?, prompt?}`.
+  - `role`: `hero` (featured image, at most one), `inline` (a figure after
+    section number `afterSection`, counting from 0), or `gallery` (end of post).
+  - `url`: the server copies the image into the app when you create or update,
+    so short-lived generator links are fine.
+  - `upload_optimize_image` stores bytes (`dataBase64` + `contentType`) or a
+    `sourceUrl` and returns an `assetId` to use instead of `url`.
+  - Reserve a slot before the image exists: give `slotId`, `role`, `alt` and
+    `prompt`. The preview shows a placeholder there.
+- Revise with `update_optimize_recommendation`, keeping each `slotId`, so
+  comments about an image still point at it.
+- Publishing uploads the images to the WordPress media library, sets the hero
+  as the featured image and mounts the rest where the preview shows them.
+  Empty slots are skipped.
+
+Test on eTOP Trading LLC, recommendation
+`6fb03e55-99a8-4ea9-a489-25ede298a20a` (Passport Scanner vs Mobile OCR): update
+it with the full post and images `hero`, `scan-ui`, `extracted-details`,
+`export-to-sheet`, then Open article shows them in place.
+
 ### Research tools that show in the UI
 
 Research you run over MCP appears on the matching page under **Agent runs**,

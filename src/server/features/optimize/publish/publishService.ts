@@ -3,7 +3,8 @@ import { db } from "@/db";
 import { projectPublishSettings } from "@/db/schema";
 import { AppError } from "@/server/lib/errors";
 import { openSecret, sealSecret } from "@/server/lib/secret-box";
-import { isExecutable } from "@/shared/optimize";
+import { isExecutable, isProductUrl } from "@/shared/optimize";
+import { loadImage } from "../optimizeImages";
 import { OptimizeRepository } from "../repositories/OptimizeRepository";
 import * as woocommerce from "./woocommerceAdapter";
 import * as wordpress from "./wordpressAdapter";
@@ -166,15 +167,6 @@ export async function saveSettings(input: {
         eq(projectPublishSettings.projectId, input.projectId),
       ),
     );
-}
-
-/** A URL with a /product/ segment is a WooCommerce product; anything else is a page or post. */
-export function isProductUrl(url: string): boolean {
-  try {
-    return new URL(url).pathname.split("/").filter(Boolean).includes("product");
-  } catch {
-    return false;
-  }
 }
 
 type PublishTarget =
@@ -532,6 +524,9 @@ function adapterOptions(recommendation: Recommendation) {
     // Only a brief carries the cannibalization check that makes a new URL safe.
     allowCreate: recommendation.type === "new_page_brief",
     focusKeyword: recommendation.primaryQuery,
+    // Article images were copied into the app when the agent wrote them.
+    loadImage: async (image: { assetId?: string }) =>
+      image.assetId ? loadImage(recommendation.projectId, image.assetId) : null,
   };
 }
 

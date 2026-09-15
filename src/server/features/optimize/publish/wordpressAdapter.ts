@@ -1,5 +1,5 @@
-import type { OptimizeProposal } from "@/shared/optimize";
-import { buildDescription } from "./woocommerceAdapter";
+import { buildArticleBodyHtml } from "@/shared/articleHtml";
+import type { ArticleImage, OptimizeProposal } from "@/shared/optimize";
 
 /**
  * WordPress REST adapter for pages and blog posts: every URL that is not a
@@ -21,9 +21,11 @@ import { buildDescription } from "./woocommerceAdapter";
  * Never its title, body, author, slug or date: body sections on an existing
  * page are applied by hand, as for products.
  *
- * A new one is created from a brief: title from the H1, body from the
- * sections, published, filed under a matching category when the site has one,
- * then the Rank Math fields are written.
+ * A new one is created from a brief: its images are uploaded to the media
+ * library first (the hero becomes the featured image), then the post, with its
+ * title from the H1 and its body from shared/articleHtml.ts, the same builder
+ * the in-app article preview uses. It is published, filed under a matching
+ * category when the site has one, then the Rank Math fields are written.
  *
  * POST OR PAGE
  * Decided by the site's own permalinks, read from its newest post: if the
@@ -52,6 +54,7 @@ export type WpPlannedChange = {
     | "rank_math_focus_keyword"
     | "title"
     | "content"
+    | "images"
     | "status"
     | "categories";
   label: string;
@@ -78,6 +81,15 @@ export type WpPlan =
       changes: WpPlannedChange[];
     }
   | { ok: false; reason: string };
+
+export type LoadedImage = { bytes: ArrayBuffer; contentType: string };
+
+export type WpPublishOptions = {
+  allowCreate: boolean;
+  focusKeyword?: string | null;
+  /** Reads the stored bytes of an image; null when it has none yet. */
+  loadImage?: (image: ArticleImage) => Promise<LoadedImage | null>;
+};
 
 export type WpApplyResult =
   | {
@@ -112,9 +124,9 @@ function wpFetch(
   return fetch(`${base}/wp-json${path}`, {
     ...init,
     headers: {
+      "Content-Type": "application/json",
       ...init.headers,
       Authorization: authHeader(credentials),
-      "Content-Type": "application/json",
       Accept: "application/json",
     },
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -367,7 +379,7 @@ export async function plan(
   credentials: WordpressCredentials,
   targetUrl: string,
   proposal: OptimizeProposal,
-  options: { allowCreate: boolean; focusKeyword?: string | null },
+  options: WpPublishOptions,
 ): Promise<WpPlan> {
   const focusKeyword = options.focusKeyword?.trim() || null;
   const resolved = await resolveContent(credentials, targetUrl);
@@ -421,8 +433,12 @@ export async function plan(
       ? await findPostCategory(credentials, `${title} ${focusKeyword ?? ""}`)
       : null;
 
-  const body = buildDescription(proposal);
+  const body = buildArticleBodyHtml(proposal, { imageSource: () => null, placeholders: false });
   const sectionCount = proposal.sections.filter((section) => section.after?.trim()).length;
+  const images = proposal.images ?? [];
+  const ready = images.filter((image) => image.assetId || image.url);
+  const emptySlots = images.length - ready.length;
+  const hasHero = ready.some((image) => image.role === "hero");
   const changes: WpPlannedChange[] = [
     { field: "title", label: kind === "post" ? "Post title" : "Page title", before: "(does not exist)", after: title },
     ...(body
@@ -431,6 +447,19 @@ export async function plan(
           label: "Body content",
           before: "",
           after: `${sectionCount} section${sectionCount === 1 ? "" : "s"}`,
+        }]
+      : []),
+    ...(images.length
+      ? [{
+          field: "images" as const,
+          label: "Images",
+          before: "",
+          after: [
+            `${ready.length} to upload${hasHero ? " (hero as featured image)" : ""}`,
+            emptySlots ? `${emptySlots} empty slot${emptySlots === 1 ? "" : "s"} skipped` : "",
+          ]
+            .filter(Boolean)
+            .join(", "),
         }]
       : []),
     ...(category
@@ -471,6 +500,56 @@ async function writeSeoMeta(
 }
 
 /**
+ * Upload a brief's images to the media library. An image that fails is left
+ * out of the post and reported, rather than failing a post that is otherwise
+ * ready.
+ */
+async function uploadImages(
+  credentials: WordpressCredentials,
+  slug: string,
+  images: ArticleImage[],
+  loadImage: WpPublishOptions["loadImage"],
+): Promise<{ sources: Map<string, string>; featuredId: number | null; notes: string[] }> {
+  const sources = new Map<string, string>();
+  const notes: string[] = [];
+  let featuredId: number | null = null;
+
+  for (const image of images) {
+    if (!image.assetId && !image.url) continue;
+    const loaded = loadImage ? await loadImage(image) : null;
+    if (!loaded) {
+      notes.push(`${image.slotId} could not be read`);
+      continue;
+    }
+    const extension = (loaded.contentType.split("/")[1] ?? "img").replace("jpeg", "jpg");
+    const upload = await wpFetch(credentials, "/wp/v2/media", {
+      method: "POST",
+      headers: {
+        "Content-Type": loaded.contentType,
+        "Content-Disposition": `attachment; filename="${slug}-${image.slotId}.${extension}"`,
+      },
+      body: loaded.bytes,
+    });
+    const media = upload.ok
+      ? ((await upload.json().catch(() => ({}))) as { id?: number; source_url?: string })
+      : {};
+    if (!media.id || !media.source_url) {
+      notes.push(`${image.slotId} was not uploaded (${upload.status})`);
+      continue;
+    }
+    // Alt text and caption are fields of the media item, not of the upload.
+    await wpFetch(credentials, `/wp/v2/media/${media.id}`, {
+      method: "POST",
+      body: JSON.stringify({ alt_text: image.alt, caption: image.caption ?? "" }),
+    });
+    sources.set(image.slotId, media.source_url);
+    if (image.role === "hero") featuredId = media.id;
+  }
+
+  return { sources, featuredId, notes };
+}
+
+/**
  * Publish: update what exists, create what does not. The plan is rebuilt here
  * rather than trusted from an earlier preview, because the site may have
  * changed since.
@@ -479,7 +558,7 @@ export async function publish(
   credentials: WordpressCredentials,
   targetUrl: string,
   proposal: OptimizeProposal,
-  options: { allowCreate: boolean; focusKeyword?: string | null },
+  options: WpPublishOptions,
 ): Promise<WpApplyResult> {
   const planned = await plan(credentials, targetUrl, proposal, options);
   if (!planned.ok) return planned;
@@ -505,13 +584,23 @@ export async function publish(
   }
 
   const title = proposal.h1?.after?.trim() ?? "";
+  const uploaded = await uploadImages(
+    credentials,
+    planned.slug,
+    proposal.images ?? [],
+    options.loadImage,
+  );
   const response = await wpFetch(credentials, collection, {
     method: "POST",
     body: JSON.stringify({
       title,
       slug: planned.slug,
       status: "publish",
-      content: buildDescription(proposal),
+      content: buildArticleBodyHtml(proposal, {
+        imageSource: (image) => uploaded.sources.get(image.slotId) ?? null,
+        placeholders: false,
+      }),
+      ...(uploaded.featuredId ? { featured_media: uploaded.featuredId } : {}),
       ...(planned.categoryId ? { categories: [planned.categoryId] } : {}),
     }),
   });
@@ -540,6 +629,8 @@ export async function publish(
     mode: "create",
     target,
     applied: planned.changes,
-    revisionHint: `Created and published ${planned.kind} ${created.id}.${slugNote}${seoNote}`,
+    revisionHint: `Created and published ${planned.kind} ${created.id}.${slugNote}${seoNote}${
+      uploaded.notes.length ? ` Images: ${uploaded.notes.join("; ")}.` : ""
+    }`,
   };
 }

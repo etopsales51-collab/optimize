@@ -1,7 +1,9 @@
 import { z } from "zod";
+import { AppError } from "@/server/lib/errors";
 import { OptimizeService } from "@/server/features/optimize/services/OptimizeService";
 import { OptimizeRepository } from "@/server/features/optimize/repositories/OptimizeRepository";
 import { analyzeIntentOverlap } from "@/server/features/optimize/intentOverlap";
+import { importImageFromUrl, storeImage } from "@/server/features/optimize/optimizeImages";
 import { mcpResponse } from "@/server/mcp/formatters";
 import { buildProjectMeta } from "@/server/mcp/context";
 import { optionalMetaOutputSchema } from "@/server/mcp/output-schemas";
@@ -103,7 +105,7 @@ const createInputSchema = {
     .optional()
     .describe("Why now. Typed pointers into audit / GSC / rank / backlink / competitor data. Staff see these as source chips and links."),
   proposal: optimizeProposalSchema.describe(
-    "The machine-executable change set: before/after for title, metaDescription, h1; sections to add/rewrite/remove; internal links. 'after' copy may use simple HTML (p, h2, h3, ul, li, table, strong, a). COPY RULES — title, metaDescription, h1 and sections[].after are CUSTOMER-READY and go live verbatim: no verification asides, no 'verify before publish', no 'portfolio row', no 'no images in this brief', no names, no TODOs. Spec table cells are bare values ('X', 'IP65', '20,000'), never a value plus an essay. Write lean product facts, not manufacturer marketing sentences. Everything you are unsure about goes in `notes`, which staff read and which is never published; process language found in publishable fields is stripped server-side and reported back to you. Set 'brand' to the manufacturer (ViRDi, UBio, Nitgen…) so the product is filed under its brand category — it is otherwise guessed from the h1. Put the manufacturer catalog or datasheet PDF in 'attachments' ({kind: 'catalog'|'datasheet', label, url}) rather than in notes or a section, so staff get a card with Open and Copy; images are rejected there.",
+    "The machine-executable change set: before/after for title, metaDescription, h1; sections to add/rewrite/remove; internal links. 'after' copy may use simple HTML (p, h2, h3, ul, li, table, strong, a). COPY RULES — title, metaDescription, h1 and sections[].after are CUSTOMER-READY and go live verbatim: no verification asides, no 'verify before publish', no 'portfolio row', no 'no images in this brief', no names, no TODOs. Spec table cells are bare values ('X', 'IP65', '20,000'), never a value plus an essay. Write lean product facts, not manufacturer marketing sentences. Everything you are unsure about goes in `notes`, which staff read and which is never published; process language found in publishable fields is stripped server-side and reported back to you. Set 'brand' to the manufacturer (ViRDi, UBio, Nitgen…) so the product is filed under its brand category — it is otherwise guessed from the h1. Put the manufacturer catalog or datasheet PDF in 'attachments' ({kind: 'catalog'|'datasheet', label, url}) rather than in notes or a section, so staff get a card with Open and Copy; images are rejected there. ARTICLES AND BLOG POSTS (new_page_brief for a non-product URL): write the COMPLETE post, not a brief — h1, then every section with its full HTML in sections[].after, in reading order; staff approve from a rendered article view and approval is refused without an h1 and body. Put images in 'images': {slotId, role: 'hero'|'inline'|'gallery', url or assetId, alt, caption?, afterSection? (inline: index of the section it follows), prompt? (what it should show, for a slot whose image is not made yet)}. One hero at most; it becomes the featured image. Image URLs are copied into the app on write, so short-lived generator links are fine; or upload bytes first with upload_optimize_image and pass its assetId. On publish, images go to the site's media library and are mounted where the preview shows them.",
   ),
   cannibalizationCheck: cannibalizationCheckSchema.describe(
     "REQUIRED. Result of your overlap scan. Paste analyze_intent_overlap's cannibalizationCheck verbatim, or supply your own with the URLs you compared.",
@@ -415,6 +417,64 @@ export const addOptimizeCommentTool = {
     });
     const meta = buildProjectMeta(context, args.projectId, optimizePath(args.projectId, args.id));
     return mcpResponse({ text: "Comment posted.", meta, structuredContent: { ok: true } });
+  }),
+};
+
+const uploadImageInputSchema = {
+  projectId: projectIdSchema,
+  sourceUrl: z
+    .string()
+    .url()
+    .max(2000)
+    .optional()
+    .describe("Copy an image from this URL. Give this or dataBase64."),
+  dataBase64: z
+    .string()
+    .max(11_500_000)
+    .optional()
+    .describe("The image bytes, base64 encoded (up to 8 MB decoded). Give this or sourceUrl."),
+  contentType: z
+    .enum(["image/png", "image/jpeg", "image/webp", "image/gif", "image/avif"])
+    .optional()
+    .describe("Required with dataBase64."),
+} as const;
+type UploadImageArgs = z.infer<z.ZodObject<typeof uploadImageInputSchema>>;
+
+export const uploadOptimizeImageTool = {
+  name: "upload_optimize_image",
+  config: {
+    title: "Upload optimize image",
+    description:
+      "Store an image (generated or supplied by staff) in Deep Insights for an article recommendation. Returns an assetId: put it in proposal.images[] with a slotId, role, alt and position, then create or update the recommendation, and the article preview shows it in place. Nothing is published by this call. PNG, JPEG, WebP, GIF or AVIF, up to 8 MB. Uses no credits.",
+    inputSchema: uploadImageInputSchema,
+    outputSchema: { assetId: z.string(), contentType: z.string(), ...optionalMetaOutputSchema },
+    annotations: { readOnlyHint: false, openWorldHint: true, destructiveHint: false },
+  },
+  handler: withMcpProjectAuth(async (args: UploadImageArgs, context) => {
+    let stored: { assetId: string; contentType: string };
+    if (args.dataBase64) {
+      if (!args.contentType) {
+        throw new AppError("VALIDATION_ERROR", "contentType is required with dataBase64.");
+      }
+      const binary = atob(args.dataBase64.replace(/^data:[^,]*,/, ""));
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+      stored = await storeImage({
+        projectId: args.projectId,
+        bytes: bytes.buffer,
+        contentType: args.contentType,
+      });
+    } else if (args.sourceUrl) {
+      stored = await importImageFromUrl(args.projectId, args.sourceUrl);
+    } else {
+      throw new AppError("VALIDATION_ERROR", "Give sourceUrl or dataBase64.");
+    }
+    const meta = buildProjectMeta(context, args.projectId);
+    return mcpResponse({
+      text: `Stored image ${stored.assetId} (${stored.contentType}). Put it in proposal.images[] as assetId.`,
+      meta,
+      structuredContent: stored,
+    });
   }),
 };
 

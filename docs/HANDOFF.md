@@ -507,6 +507,23 @@ false confidence.
 - No Rank Math: the post still publishes and the result says SEO fields were
   not written.
 
+### 6.5c Article preview and images
+
+- `proposal.images[]` (`shared/optimize.ts`, optional): slots with `role`
+  hero, inline or gallery, `url` or `assetId`, `alt`, `caption`,
+  `afterSection`, `prompt`.
+- Images are copied into R2 (`optimize-images/<projectId>/<assetId>`) on
+  create and update (`features/optimize/optimizeImages.ts`), served at
+  `/api/optimize-images/<projectId>/<assetId>` (raster only, nosniff, sandbox
+  CSP). MCP `upload_optimize_image` stores bytes or a URL.
+- `shared/articleHtml.ts` builds the body with images mounted. The **Open
+  article** modal (`client/features/optimize/ArticlePreview.tsx`) and the
+  WordPress publisher both use it, so the preview matches what is published.
+- `isArticleBrief` = new_page_brief and not a product URL. Approve is refused
+  (server and UI) until it has an H1 and body (`articleMissing`).
+- WordPress publish uploads images to `/wp/v2/media`, sets alt and caption,
+  hero becomes `featured_media`; a failed image is reported, not fatal.
+
 ### 6.6 Publishing credentials (per project)
 
 - Table `project_publish_settings` (`src/db/publish.schema.ts` + pg), **one row

@@ -20,6 +20,8 @@ import {
   canTransition,
   createRecommendationSchema,
   newPageBriefAllowed,
+  articleMissing,
+  isArticleBrief,
   updateRecommendationSchema,
   type CannibalizationCheck,
   type OptimizeStatus,
@@ -28,6 +30,7 @@ import {
 import { OptimizeRepository } from "../repositories/OptimizeRepository";
 import { sanitizePreviewHtml } from "../previewSanitizer";
 import { sanitizeProposalCopy, type CopyRemoval } from "../copySanitizer";
+import { storeProposalImages } from "../optimizeImages";
 
 export type AgentActor = { type: "agent"; id: string; label: string };
 export type UserActor = { type: "user"; id: string; label: string };
@@ -123,7 +126,10 @@ async function createRecommendation(input: {
   // Publishable copy is cleaned on the way in, so what is stored is already the
   // customer's version. `notes` is untouched — that is where the agent's
   // working detail belongs, and nothing publishes it.
-  const { proposal, removals } = sanitizeProposalCopy(data.proposal);
+  const cleaned = sanitizeProposalCopy(data.proposal);
+  const { removals } = cleaned;
+  // Image links from a generator expire; keep the app's own copy.
+  const proposal = await storeProposalImages(input.projectId, cleaned.proposal);
 
   const id = crypto.randomUUID();
 
@@ -247,10 +253,16 @@ async function updateRecommendation(input: {
   }
 
   // Same cleaning as create — a revision is the other way copy gets in.
-  const cleaned =
+  const sanitized =
     patch.proposal === undefined
       ? null
       : sanitizeProposalCopy(patch.proposal);
+  const cleaned = sanitized
+    ? {
+        ...sanitized,
+        proposal: await storeProposalImages(input.projectId, sanitized.proposal),
+      }
+    : null;
 
   await OptimizeRepository.updateRecommendation(input.id, input.projectId, {
     status: nextStatus,
@@ -369,6 +381,17 @@ async function approve(input: {
     );
   }
   assertMergeShape(existing.type, existing.merge);
+
+  // An article is approved from its finished look, so it must have one.
+  if (isArticleBrief(existing)) {
+    const missing = articleMissing(existing.proposal);
+    if (missing.length > 0) {
+      throw new AppError(
+        "VALIDATION_ERROR",
+        `This article cannot be approved yet: it has no ${missing.join(" or ")}. Request changes so the agent writes the full post.`,
+      );
+    }
+  }
 
   const approvedAt = new Date().toISOString();
   await OptimizeRepository.updateRecommendation(input.id, input.projectId, {

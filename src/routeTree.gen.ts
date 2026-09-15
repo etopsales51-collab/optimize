@@ -42,6 +42,7 @@ import { Route as AppHelpOpenrouterApiKeyRouteImport } from './routes/_app/help/
 import { Route as AppHelpDataforseoApiKeyRouteImport } from './routes/_app/help/dataforseo-api-key'
 import { Route as ProjectPProjectIdRouteRouteImport } from './routes/_project/p/$projectId/route'
 import { Route as ProjectPProjectIdIndexRouteImport } from './routes/_project/p/$projectId/index'
+import { Route as ApiOptimizeImagesProjectIdAssetIdRouteImport } from './routes/api/optimize-images/$projectId/$assetId'
 import { Route as ApiGscOauthCallbackRouteImport } from './routes/api/gsc/oauth/callback'
 import { Route as ApiGa4OauthCallbackRouteImport } from './routes/api/ga4/oauth/callback'
 import { Route as ProjectPProjectIdWhatsappRouteImport } from './routes/_project/p/$projectId/whatsapp'
@@ -232,6 +233,12 @@ const ProjectPProjectIdIndexRoute = ProjectPProjectIdIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ProjectPProjectIdRouteRoute,
 } as any)
+const ApiOptimizeImagesProjectIdAssetIdRoute =
+  ApiOptimizeImagesProjectIdAssetIdRouteImport.update({
+    id: '/api/optimize-images/$projectId/$assetId',
+    path: '/api/optimize-images/$projectId/$assetId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiGscOauthCallbackRoute = ApiGscOauthCallbackRouteImport.update({
   id: '/api/gsc/oauth/callback',
   path: '/api/gsc/oauth/callback',
@@ -414,6 +421,7 @@ export interface FileRoutesByFullPath {
   '/p/$projectId/whatsapp': typeof ProjectPProjectIdWhatsappRoute
   '/api/ga4/oauth/callback': typeof ApiGa4OauthCallbackRoute
   '/api/gsc/oauth/callback': typeof ApiGscOauthCallbackRoute
+  '/api/optimize-images/$projectId/$assetId': typeof ApiOptimizeImagesProjectIdAssetIdRoute
   '/p/$projectId/': typeof ProjectPProjectIdIndexRoute
   '/p/$projectId/optimize/$recommendationId': typeof ProjectPProjectIdOptimizeRecommendationIdRoute
   '/p/$projectId/rank-tracking/$configId': typeof ProjectPProjectIdRankTrackingConfigIdRoute
@@ -464,6 +472,7 @@ export interface FileRoutesByTo {
   '/p/$projectId/whatsapp': typeof ProjectPProjectIdWhatsappRoute
   '/api/ga4/oauth/callback': typeof ApiGa4OauthCallbackRoute
   '/api/gsc/oauth/callback': typeof ApiGscOauthCallbackRoute
+  '/api/optimize-images/$projectId/$assetId': typeof ApiOptimizeImagesProjectIdAssetIdRoute
   '/p/$projectId': typeof ProjectPProjectIdIndexRoute
   '/p/$projectId/optimize/$recommendationId': typeof ProjectPProjectIdOptimizeRecommendationIdRoute
   '/p/$projectId/rank-tracking/$configId': typeof ProjectPProjectIdRankTrackingConfigIdRoute
@@ -524,6 +533,7 @@ export interface FileRoutesById {
   '/_project/p/$projectId/whatsapp': typeof ProjectPProjectIdWhatsappRoute
   '/api/ga4/oauth/callback': typeof ApiGa4OauthCallbackRoute
   '/api/gsc/oauth/callback': typeof ApiGscOauthCallbackRoute
+  '/api/optimize-images/$projectId/$assetId': typeof ApiOptimizeImagesProjectIdAssetIdRoute
   '/_project/p/$projectId/': typeof ProjectPProjectIdIndexRoute
   '/_project/p/$projectId/optimize/$recommendationId': typeof ProjectPProjectIdOptimizeRecommendationIdRoute
   '/_project/p/$projectId/rank-tracking/$configId': typeof ProjectPProjectIdRankTrackingConfigIdRoute
@@ -581,6 +591,7 @@ export interface FileRouteTypes {
     | '/p/$projectId/whatsapp'
     | '/api/ga4/oauth/callback'
     | '/api/gsc/oauth/callback'
+    | '/api/optimize-images/$projectId/$assetId'
     | '/p/$projectId/'
     | '/p/$projectId/optimize/$recommendationId'
     | '/p/$projectId/rank-tracking/$configId'
@@ -631,6 +642,7 @@ export interface FileRouteTypes {
     | '/p/$projectId/whatsapp'
     | '/api/ga4/oauth/callback'
     | '/api/gsc/oauth/callback'
+    | '/api/optimize-images/$projectId/$assetId'
     | '/p/$projectId'
     | '/p/$projectId/optimize/$recommendationId'
     | '/p/$projectId/rank-tracking/$configId'
@@ -690,6 +702,7 @@ export interface FileRouteTypes {
     | '/_project/p/$projectId/whatsapp'
     | '/api/ga4/oauth/callback'
     | '/api/gsc/oauth/callback'
+    | '/api/optimize-images/$projectId/$assetId'
     | '/_project/p/$projectId/'
     | '/_project/p/$projectId/optimize/$recommendationId'
     | '/_project/p/$projectId/rank-tracking/$configId'
@@ -720,6 +733,7 @@ export interface RootRouteChildren {
   ApiWhatsappInboundRoute: typeof ApiWhatsappInboundRoute
   ApiGa4OauthCallbackRoute: typeof ApiGa4OauthCallbackRoute
   ApiGscOauthCallbackRoute: typeof ApiGscOauthCallbackRoute
+  ApiOptimizeImagesProjectIdAssetIdRoute: typeof ApiOptimizeImagesProjectIdAssetIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -954,6 +968,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/p/$projectId/'
       preLoaderRoute: typeof ProjectPProjectIdIndexRouteImport
       parentRoute: typeof ProjectPProjectIdRouteRoute
+    }
+    '/api/optimize-images/$projectId/$assetId': {
+      id: '/api/optimize-images/$projectId/$assetId'
+      path: '/api/optimize-images/$projectId/$assetId'
+      fullPath: '/api/optimize-images/$projectId/$assetId'
+      preLoaderRoute: typeof ApiOptimizeImagesProjectIdAssetIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/gsc/oauth/callback': {
       id: '/api/gsc/oauth/callback'
@@ -1331,6 +1352,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiWhatsappInboundRoute: ApiWhatsappInboundRoute,
   ApiGa4OauthCallbackRoute: ApiGa4OauthCallbackRoute,
   ApiGscOauthCallbackRoute: ApiGscOauthCallbackRoute,
+  ApiOptimizeImagesProjectIdAssetIdRoute:
+    ApiOptimizeImagesProjectIdAssetIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

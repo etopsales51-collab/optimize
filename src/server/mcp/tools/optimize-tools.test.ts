@@ -36,6 +36,12 @@ vi.mock("@/server/features/optimize/services/OptimizeService", () => ({
   },
 }));
 
+// Image storage reads the Workers R2 binding, which tests do not have.
+vi.mock("@/server/features/optimize/optimizeImages", () => ({
+  importImageFromUrl: vi.fn(),
+  storeImage: vi.fn(),
+}));
+
 vi.mock("@/server/features/optimize/repositories/OptimizeRepository", () => ({
   OptimizeRepository: {
     listCrawlInventoryForProject: mocks.listCrawlInventoryForProject,

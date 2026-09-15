@@ -170,6 +170,44 @@ export const mergePlanSchema = z.object({
 });
 export type MergePlan = z.infer<typeof mergePlanSchema>;
 
+/** A URL with a /product/ segment is a WooCommerce product; anything else is a page or post. */
+export function isProductUrl(url: string): boolean {
+  try {
+    return new URL(url).pathname.split("/").filter(Boolean).includes("product");
+  } catch {
+    return false;
+  }
+}
+
+export const ARTICLE_IMAGE_ROLES = ["hero", "inline", "gallery"] as const;
+
+export const articleImageSchema = z.object({
+  // Stable name for the slot, e.g. "hero", "scan-ui". Revisions keep it so
+  // staff comments about an image still point at the same one.
+  slotId: z.string().min(1).max(60).regex(/^[a-z0-9][a-z0-9-_]*$/i, "Use letters, digits, - or _."),
+  // hero: featured image above the H1. inline: a figure in the body.
+  // gallery: collected at the end of the article.
+  role: z.enum(ARTICLE_IMAGE_ROLES),
+  // Where the image comes from. The server copies it into the app on write,
+  // so a generator's short-lived link cannot expire before publishing.
+  url: z
+    .string()
+    .url()
+    .max(2000)
+    .refine((value) => !/\.svg(\?|#|$)/i.test(value), "SVG is not accepted; use PNG, JPEG or WebP.")
+    .optional(),
+  // Set by the server once stored (or returned by upload_optimize_image).
+  assetId: z.string().uuid().optional(),
+  alt: z.string().max(300).default(""),
+  caption: z.string().max(500).optional(),
+  // Inline only: mounted after this section, counting from 0. Omitted, it goes
+  // after the last section.
+  afterSection: z.number().int().min(0).max(59).optional(),
+  // What the image should show, for a slot whose image is not made yet.
+  prompt: z.string().max(1000).optional(),
+});
+export type ArticleImage = z.infer<typeof articleImageSchema>;
+
 /** The machine-executable change set. Every field is a Before/After pair. */
 export const optimizeProposalSchema = z.object({
   title: z.object({ before: z.string().max(500), after: z.string().max(500) }).optional(),
@@ -227,9 +265,48 @@ export const optimizeProposalSchema = z.object({
     )
     .max(10)
     .default([]),
+  // Images for an article or blog post, mounted into the preview and uploaded
+  // to the site's media library on publish. A slot may be reserved before the
+  // image exists: give `prompt` (what it should show) and add the image later.
+  // Optional rather than defaulted: proposals stored before images existed have
+  // none, and every reader treats a missing list as empty.
+  images: z
+    .array(articleImageSchema)
+    .max(20)
+    .refine(
+      (images) => new Set(images.map((image) => image.slotId)).size === images.length,
+      "Each image needs its own slotId.",
+    )
+    .refine(
+      (images) => images.filter((image) => image.role === "hero").length <= 1,
+      "An article has at most one hero image.",
+    )
+    .optional(),
   notes: z.string().max(5000).default(""),
 });
 export type OptimizeProposal = z.infer<typeof optimizeProposalSchema>;
+
+/**
+ * An article built from a brief: a new_page_brief for anything that is not a
+ * WooCommerce product. Staff must be able to read it as the finished post, so
+ * approval waits until it has a title and a body.
+ */
+export function isArticleBrief(recommendation: {
+  type: OptimizeType;
+  targetUrl: string;
+}): boolean {
+  return recommendation.type === "new_page_brief" && !isProductUrl(recommendation.targetUrl);
+}
+
+/** What an article still lacks before it can be read as a finished post. */
+export function articleMissing(proposal: OptimizeProposal): string[] {
+  const missing: string[] = [];
+  if (!proposal.h1?.after?.trim()) missing.push("an H1");
+  if (!proposal.sections.some((section) => section.action !== "remove" && section.after?.trim())) {
+    missing.push("body sections");
+  }
+  return missing;
+}
 
 export const pageSnapshotSchema = z.object({
   url: z.string().url().max(2000),

@@ -21,7 +21,7 @@ export const MCP_MODULES = [
   { key: "google_analytics", tools: ["get_google_analytics_*"] },
   { key: "rank_tracking", tools: ["get_rank_tracker", "create_rank_tracker", "run_rank_tracker", "add_rank_tracking_keywords", "remove_rank_tracking_keywords", "estimate_rank_tracker_cost"] },
   { key: "site_audit", tools: ["run_site_audit", "get_audit_status", "get_audit_issues", "get_audit_pages"] },
-  { key: "optimize", tools: ["create_optimize_recommendation", "update_optimize_recommendation", "list_optimize_recommendations", "get_optimize_recommendation", "add_optimize_comment", "list_optimize_comments", "analyze_intent_overlap"] },
+  { key: "optimize", tools: ["create_optimize_recommendation", "update_optimize_recommendation", "list_optimize_recommendations", "get_optimize_recommendation", "add_optimize_comment", "list_optimize_comments", "analyze_intent_overlap", "upload_optimize_image"] },
   { key: "whatsapp", tools: ["list_whatsapp_messages", "send_whatsapp_message"] },
   { key: "module_access", tools: ["list_accessible_modules", "request_module_access"] },
 ] as const;

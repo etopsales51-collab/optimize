@@ -5,12 +5,14 @@ import {
   ArrowLeft,
   Check,
   ExternalLink,
+  FileText,
   RotateCcw,
   Upload,
   X,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { ArticlePreviewModal } from "@/client/features/optimize/ArticlePreview";
 import { BeforeAfter } from "@/client/features/optimize/BeforeAfter";
 import { CommentThread } from "@/client/features/optimize/CommentThread";
 import {
@@ -29,7 +31,13 @@ import {
   requestOptimizeChanges,
   retryOptimizePublish,
 } from "@/serverFunctions/optimize";
-import { canApprove, canRetryPublish, isExecutable } from "@/shared/optimize";
+import {
+  articleMissing,
+  canApprove,
+  canRetryPublish,
+  isArticleBrief,
+  isExecutable,
+} from "@/shared/optimize";
 
 export const Route = createFileRoute(
   "/_project/p/$projectId/optimize/$recommendationId",
@@ -53,6 +61,7 @@ function OptimizeDetailPage() {
   const queryClient = useQueryClient();
   const [changesOpen, setChangesOpen] = useState(false);
   const [changesBody, setChangesBody] = useState("");
+  const [articleOpen, setArticleOpen] = useState(false);
 
   const queryKey = ["optimize", projectId, recommendationId];
 
@@ -96,6 +105,7 @@ function OptimizeDetailPage() {
       }),
     onSuccess: () => {
       toast.success("Approved");
+      setArticleOpen(false);
       refresh();
     },
     onError: (err) =>
@@ -191,7 +201,12 @@ function OptimizeDetailPage() {
 
   const { recommendation, comments } = data;
   const check = recommendation.cannibalizationCheck;
-  const approvable = canApprove(recommendation.status);
+  // An article is approved from its finished look, so it needs a title and
+  // body first. The server enforces the same rule.
+  const isArticle = isArticleBrief(recommendation);
+  const missingForArticle = isArticle ? articleMissing(recommendation.proposal) : [];
+  const approvable =
+    canApprove(recommendation.status) && missingForArticle.length === 0;
   const publishable = isExecutable(recommendation.status);
   const retryable = canRetryPublish(recommendation.status);
   const failureReason = recommendation.execution.error;
@@ -254,7 +269,7 @@ function OptimizeDetailPage() {
           <button
             type="button"
             className="btn btn-sm"
-            disabled={!approvable || changesMutation.isPending}
+            disabled={!canApprove(recommendation.status) || changesMutation.isPending}
             onClick={() => setChangesOpen(true)}
           >
             Request changes
@@ -286,7 +301,9 @@ function OptimizeDetailPage() {
           ) : null}
 
           <p className="ml-auto text-xs text-base-content/50">
-            {approvable
+            {canApprove(recommendation.status) && missingForArticle.length > 0
+              ? `This article has no ${missingForArticle.join(" or ")} yet. Request changes so the agent writes the full post.`
+              : approvable
               ? "Approving records your decision. Publishing is a separate step."
               : publishable
                 ? "Approved. Publish when you are ready."
@@ -504,6 +521,26 @@ function OptimizeDetailPage() {
           </section>
         ) : null}
 
+        {isArticle || (recommendation.proposal.images ?? []).length > 0 ? (
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4">
+            <FileText className="size-5 shrink-0 text-primary" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">Read the finished article</p>
+              <p className="text-xs text-base-content/60">
+                The full post with its images in place, as it will be
+                published.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => setArticleOpen(true)}
+            >
+              Open article
+            </button>
+          </div>
+        ) : null}
+
         <BeforeAfter
           proposal={recommendation.proposal}
           previewHtml={recommendation.previewHtml}
@@ -515,6 +552,45 @@ function OptimizeDetailPage() {
           onPost={(body) => commentMutation.mutate(body)}
         />
       </div>
+
+      {articleOpen ? (
+        <ArticlePreviewModal
+          projectId={projectId}
+          targetUrl={recommendation.targetUrl}
+          proposal={recommendation.proposal}
+          onClose={() => setArticleOpen(false)}
+          actions={
+            canApprove(recommendation.status) ? (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm gap-1.5"
+                  disabled={!approvable || approveMutation.isPending}
+                  onClick={() => approveMutation.mutate()}
+                >
+                  <Check className="size-4" />
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={() => {
+                    setArticleOpen(false);
+                    setChangesOpen(true);
+                  }}
+                >
+                  Request changes
+                </button>
+                <p className="ml-auto text-xs text-base-content/50">
+                  {approvable
+                    ? "Approving records your decision. Publishing is a separate step."
+                    : `No ${missingForArticle.join(" or ")} yet.`}
+                </p>
+              </>
+            ) : null
+          }
+        />
+      ) : null}
 
       {changesOpen ? (
         <div className="modal modal-open" role="dialog">
