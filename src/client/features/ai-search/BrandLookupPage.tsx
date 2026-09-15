@@ -17,6 +17,7 @@ import { getStandardErrorMessage } from "@/client/lib/error-messages";
 import { BrandLookupResults } from "@/client/features/ai-search/components/BrandLookupResults";
 import { BrandLookupSearchCard } from "@/client/features/ai-search/components/BrandLookupSearchCard";
 import { BrandLookupHistorySection } from "@/client/features/ai-search/components/BrandLookupHistorySection";
+import { AgentRunsSection } from "@/client/features/research-runs/AgentRunsSection";
 import { AiSearchLoadingState } from "@/client/features/ai-search/components/AiSearchLoadingState";
 import { AiSearchPaidPlanGate } from "@/client/features/ai-search/components/AiSearchPaidPlanGate";
 import { useBrandLookupSearchHistory } from "@/client/hooks/useBrandLookupSearchHistory";
@@ -324,12 +325,15 @@ function BrandLookupPageInner({
                 <BrandLookupResults result={resultData} projectId={projectId} />
               </>
             ) : !errorMessage ? (
-              <BrandLookupHistorySection
-                projectId={projectId}
-                history={history}
-                historyLoaded={historyLoaded}
-                onRemoveHistoryItem={removeHistoryItem}
-              />
+              <div className="space-y-4">
+                <BrandLookupHistorySection
+                  projectId={projectId}
+                  history={history}
+                  historyLoaded={historyLoaded}
+                  onRemoveHistoryItem={removeHistoryItem}
+                />
+                <AgentRunsSection projectId={projectId} page="brand_lookup" />
+              </div>
             ) : null}
           </>
         )}

@@ -7,6 +7,7 @@ import {
   BacklinksLoadingState,
 } from "./BacklinksPageStates";
 import { BacklinksHistorySection } from "./BacklinksHistorySection";
+import { AgentRunsSection } from "@/client/features/research-runs/AgentRunsSection";
 import type { BacklinksSearchHistoryItem } from "@/client/hooks/useBacklinksSearchHistory";
 import type {
   BacklinksOverviewData,
@@ -114,12 +115,15 @@ export function BacklinksBody({
 
   if (!searchState.target) {
     return (
-      <BacklinksHistorySection
-        projectId={projectId}
-        history={history}
-        historyLoaded={historyLoaded}
-        onRemoveHistoryItem={onRemoveHistoryItem}
-      />
+      <div className="space-y-4">
+        <BacklinksHistorySection
+          projectId={projectId}
+          history={history}
+          historyLoaded={historyLoaded}
+          onRemoveHistoryItem={onRemoveHistoryItem}
+        />
+        <AgentRunsSection projectId={projectId} page="backlinks" />
+      </div>
     );
   }
 

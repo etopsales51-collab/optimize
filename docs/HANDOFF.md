@@ -622,10 +622,44 @@ added.
 - Grok authenticates with an API key created in the app (prefix `oseo_`) or
   OAuth. MCP clients cache the tool list at connect time: after adding or
   changing tools or output schemas, **reconnect the client**.
-- The full tool list at `b583d60` is registered in `src/server/mcp/server.ts`
-  (57 tools across projects, keywords, SERP, domain, backlinks, rank tracking,
-  local SEO, Search Console, GA4, site audit, project context, Optimize and
-  WhatsApp).
+- Every tool is registered in `src/server/mcp/server.ts` (60 tools across
+  projects, keywords, SERP, domain, backlinks, Brand Lookup, Prompt Explorer,
+  rank tracking, local SEO, Search Console, GA4, site audit, project context,
+  Optimize and WhatsApp). One token reaches all of them; nothing is hidden per
+  module.
+- **Module list.** `src/server/mcp/modules.ts` (`MCP_MODULES`) is what
+  `list_accessible_modules` and `request_module_access` return.
+  `modules.test.ts` fails if a registered tool belongs to no module, so a new
+  tool cannot be silently left out.
+- **AI search tools** (`tools/ai-search-tools.ts`): `run_brand_lookup` and
+  `run_prompt_explorer` call the same services with the same defaults as the
+  pages (Brand Lookup: location 2784, language en; Prompt Explorer: all four
+  models, web search on, country US). Same parameters means the same R2 cache
+  key, so opening an agent run in the UI does not charge again while fresh.
+- **Agent runs** (`research_runs` table, `features/research-runs/`). After a
+  research tool succeeds, `server.ts` calls `recordResearchToolCall`, which maps
+  the call to page URL params (`shared/researchRuns.ts`) and logs one row per
+  target. Keyword research, Domain, Backlinks, Brand Lookup and Prompt Explorer
+  show these under **Agent runs** beside Recent searches (`AgentRunsSection`).
+  Agents can read them back with `list_research_runs`. Logging never throws,
+  so a failed insert cannot fail the tool.
+
+### 6.11 Research history is stored in the database
+
+- The five Research pages keep **Recent searches** in `research_history_lists`
+  (one row per user, project and list). They follow the person to any PC.
+- `src/client/hooks/useLocalHistoryStore.ts` keeps its old name and signature,
+  so no page changed. It loads from the server. On a browser's first load it
+  merges that browser's old localStorage list in, once (flag
+  `<storageKey>:imported-to-db`), then saves every change as the whole list.
+  localStorage is only a fallback copy for when the server cannot be reached.
+- Changes made before the saved list loads are only shown, not saved, then
+  merged once it loads. This stops a quick auto-search from overwriting the
+  stored list.
+- Saved keywords, rank tracking, audits and Optimize were already in the
+  database. Still per browser, on purpose: the open search tabs
+  (sessionStorage), table filters, preferred keyword location, theme and last
+  active project. These are view preferences, not research data.
 
 ---
 

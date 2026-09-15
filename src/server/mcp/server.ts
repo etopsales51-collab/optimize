@@ -11,6 +11,7 @@ import {
 } from "@/server/mcp/context";
 import { objectSchema } from "@/server/mcp/output-schemas";
 import { instrumentMcpToolHandler } from "@/server/mcp/instrumentation";
+import { recordResearchToolCall } from "@/server/features/research-runs/ResearchRunsService";
 import { getBacklinksOverviewTool } from "@/server/mcp/tools/get-backlinks-overview";
 import { getBacklinksProfileTool } from "@/server/mcp/tools/get-backlinks-profile";
 import { getDomainKeywordSuggestionsTool } from "@/server/mcp/tools/get-domain-keyword-suggestions";
@@ -84,6 +85,11 @@ import {
   listWhatsappMessagesTool,
   sendWhatsappMessageTool,
 } from "@/server/mcp/tools/whatsapp-tools";
+import {
+  listResearchRunsTool,
+  runBrandLookupTool,
+  runPromptExplorerTool,
+} from "@/server/mcp/tools/ai-search-tools";
 
 type ToolSchema = z.ZodType | z.ZodRawShape;
 
@@ -130,12 +136,24 @@ function registerOpenSeoTool<Input extends ToolSchema>(
       inputSchema: objectSchema(tool.config.inputSchema),
       outputSchema,
     },
-    (args, context) => {
-      return handler(
+    async (args, context) => {
+      const toolContext = createMcpToolContext(context, authProps);
+      const result = await handler(
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- args were validated against the tool's own inputSchema just above
         args as ToolArgs<Input>,
-        createMcpToolContext(context, authProps),
+        toolContext,
       );
+      // Research an agent did is logged so staff see it on the matching
+      // Research page; the pages' own history is browser-local and unreachable
+      // from here. Only successful calls, and never at the cost of the result.
+      if (!result.isError) {
+        await recordResearchToolCall({
+          toolName: tool.name,
+          args,
+          actorLabel: toolContext.auth.userEmail,
+        });
+      }
+      return result;
     },
   );
 }
@@ -186,6 +204,9 @@ export function createOpenSeoMcpServer(authProps: McpProps) {
   register(getDomainKeywordSuggestionsTool);
   register(getBacklinksOverviewTool);
   register(getBacklinksProfileTool);
+  register(runBrandLookupTool);
+  register(runPromptExplorerTool);
+  register(listResearchRunsTool);
   register(getSerpResultsTool);
   register(createRankTrackerTool);
   register(getRankTrackerTool);

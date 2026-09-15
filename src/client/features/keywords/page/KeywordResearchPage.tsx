@@ -21,6 +21,7 @@ import {
   useSearchTabNavigation,
 } from "@/client/features/search-tabs/useSearchTabNavigation";
 import { KeywordResearchEmptyState } from "./KeywordResearchEmptyState";
+import { AgentRunsSection } from "@/client/features/research-runs/AgentRunsSection";
 import { KeywordResearchLoadingState } from "./KeywordResearchLoadingState";
 import { KeywordResearchResults } from "./KeywordResearchResults";
 import { KeywordResearchSearchBar } from "./KeywordResearchSearchBar";
@@ -256,10 +257,13 @@ function KeywordResearchContent({
 
   if (controller.rows.length === 0) {
     return (
-      <KeywordResearchEmptyState
-        controller={controller}
-        projectId={projectId}
-      />
+      <div className="space-y-4">
+        <KeywordResearchEmptyState
+          controller={controller}
+          projectId={projectId}
+        />
+        <AgentRunsSection projectId={projectId} page="keywords" />
+      </div>
     );
   }
 

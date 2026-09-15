@@ -337,6 +337,20 @@
       "when": 1789373046676,
       "tag": "0047_greedy_masked_marvel",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "6",
+      "when": 1789457581793,
+      "tag": "0048_melted_silk_fever",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "6",
+      "when": 1789457876126,
+      "tag": "0049_lucky_gwen_stacy",
+      "breakpoints": true
     }
   ]
 }

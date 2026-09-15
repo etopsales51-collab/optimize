@@ -19,6 +19,7 @@ import { PromptExplorerForm } from "@/client/features/ai-search/components/Promp
 import { PromptExplorerResults } from "@/client/features/ai-search/components/PromptExplorerResults";
 import { PromptExplorerLoadingState } from "@/client/features/ai-search/components/PromptExplorerLoadingState";
 import { PromptExplorerHistorySection } from "@/client/features/ai-search/components/PromptExplorerHistorySection";
+import { AgentRunsSection } from "@/client/features/research-runs/AgentRunsSection";
 import { AiSearchPaidPlanGate } from "@/client/features/ai-search/components/AiSearchPaidPlanGate";
 import { usePromptExplorerSearchHistory } from "@/client/hooks/usePromptExplorerSearchHistory";
 import {
@@ -261,12 +262,15 @@ function PromptExplorerPageInner({
                 <PromptExplorerResults result={resultData} />
               </>
             ) : !errorMessage ? (
-              <PromptExplorerHistorySection
-                projectId={projectId}
-                history={history}
-                historyLoaded={historyLoaded}
-                onRemoveHistoryItem={removeHistoryItem}
-              />
+              <div className="space-y-4">
+                <PromptExplorerHistorySection
+                  projectId={projectId}
+                  history={history}
+                  historyLoaded={historyLoaded}
+                  onRemoveHistoryItem={removeHistoryItem}
+                />
+                <AgentRunsSection projectId={projectId} page="prompt_explorer" />
+              </div>
             ) : null}
           </>
         )}

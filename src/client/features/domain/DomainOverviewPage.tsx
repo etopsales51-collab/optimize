@@ -20,6 +20,7 @@ import {
 import { useDomainOverviewQuery } from "@/client/features/domain/hooks/useDomainOverviewQuery";
 import { DomainOverviewLoadingState } from "@/client/features/domain/components/DomainOverviewLoadingState";
 import { DomainHistorySection } from "@/client/features/domain/components/DomainHistorySection";
+import { AgentRunsSection } from "@/client/features/research-runs/AgentRunsSection";
 import { DomainSearchCard } from "@/client/features/domain/components/DomainSearchCard";
 import { KeywordsTab } from "@/client/features/domain/components/KeywordsTab";
 import { PagesTab } from "@/client/features/domain/components/PagesTab";
@@ -590,6 +591,7 @@ export function DomainOverviewPage({
               onRemoveHistoryItem={state.removeHistoryItem}
               onSelectHistoryItem={state.handleHistorySelect}
             />
+            <AgentRunsSection projectId={projectId} page="domain" />
           </div>
         ) : (
           <>

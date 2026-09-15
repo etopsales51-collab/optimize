@@ -183,6 +183,20 @@
       "when": 1789373059841,
       "tag": "0025_cute_mach_iv",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1789457584804,
+      "tag": "0026_amusing_expediter",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1789457878415,
+      "tag": "0027_solid_firelord",
+      "breakpoints": true
     }
   ]
 }

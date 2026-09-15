@@ -177,7 +177,35 @@ Grok can now post into Optimize. Nine tools, all credit-free:
 | `list_optimize_recommendations` | Open items — call first to find `changes_requested` work. |
 | `get_optimize_recommendation` | Full detail plus the comment thread. |
 | `add_optimize_comment` / `list_optimize_comments` | The in-UI conversation, both directions. |
-| `list_accessible_modules` / `request_module_access` | Declare what a routine will read; logged with agent identity. |
+| `list_accessible_modules` / `request_module_access` | Declare what a routine will read; logged with agent identity. Lists every module, including `brand_lookup`, `prompt_explorer`, `research_runs` and `whatsapp`. |
+
+### Research tools that show in the UI
+
+Research you run over MCP appears on the matching page under **Agent runs**,
+and clicking one opens the result from cache (no second charge while fresh).
+Reconnect the MCP client once to load the new tools.
+
+| Tool | Shows under Agent runs on |
+|---|---|
+| `research_keywords`, `get_serp_results` | Keyword research |
+| `get_domain_overview`, `get_domain_keyword_suggestions` | Domain overview |
+| `get_backlinks_overview`, `get_backlinks_profile` | Backlinks |
+| `run_brand_lookup` (query, competitors?, scope?) | AI Search → Brand Lookup |
+| `run_prompt_explorer` (prompt, models?, highlightBrand?, webSearch?, webSearchCountryCode?) | AI Search → Prompt Explorer |
+| `list_research_runs` (page?, limit?) | Reads the log back |
+
+Test checklist for eTOP Trading LLC, projectId
+`bc036e41-1963-4e70-b6da-034a5df96f67`:
+
+1. `list_accessible_modules`: shows `brand_lookup`, `prompt_explorer`,
+   `research_runs` and `whatsapp`.
+2. `run_brand_lookup` with query `etopme.ae`: Brand Lookup page shows it under
+   Agent runs, and Open loads without a new charge.
+3. `run_prompt_explorer` with a prompt such as "best time attendance system in
+   Dubai" and highlightBrand `etopme.ae`: shows on Prompt Explorer.
+4. `research_keywords`, `get_domain_overview` and `get_backlinks_overview`:
+   each shows on its page.
+5. `list_research_runs`: returns all of the above.
 
 Two things the server enforces, so the agent does not have to be trusted:
 

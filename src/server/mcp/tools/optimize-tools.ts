@@ -6,6 +6,7 @@ import { mcpResponse } from "@/server/mcp/formatters";
 import { buildProjectMeta } from "@/server/mcp/context";
 import { optionalMetaOutputSchema } from "@/server/mcp/output-schemas";
 import { withMcpProjectAuth } from "@/server/mcp/project-auth";
+import { MCP_MODULES } from "@/server/mcp/modules";
 import { projectIdSchema } from "@/server/mcp/schemas";
 import {
   cannibalizationCheckSchema,
@@ -538,19 +539,7 @@ export const analyzeIntentOverlapTool = {
 // Module access — explicit, per the agent contract
 // ---------------------------------------------------------------------------
 
-const MODULES = [
-  { key: "site_audit", tools: ["run_site_audit", "get_audit_status", "get_audit_issues", "get_audit_pages"] },
-  { key: "search_console", tools: ["get_search_console_performance", "inspect_urls", "get_search_opportunities"] },
-  { key: "google_analytics", tools: ["get_google_analytics_*"] },
-  { key: "rank_tracking", tools: ["get_rank_tracker", "create_rank_tracker", "run_rank_tracker", "add_rank_tracking_keywords", "remove_rank_tracking_keywords", "estimate_rank_tracker_cost"] },
-  { key: "keyword_research", tools: ["research_keywords", "get_keyword_metrics", "save_keywords", "list_saved_keywords"] },
-  { key: "serp", tools: ["get_serp_results", "get_ranked_keywords", "find_serp_competitors"] },
-  { key: "domain", tools: ["get_domain_overview", "get_domain_keyword_suggestions"] },
-  { key: "backlinks", tools: ["get_backlinks_overview", "get_backlinks_profile"] },
-  { key: "local_seo", tools: ["search_local_businesses", "get_local_serp_results", "get_business_*", "get_local_rank_grid", "list_business_categories"] },
-  { key: "project_context", tools: ["get_project_context", "update_project_context"] },
-  { key: "optimize", tools: ["create_optimize_recommendation", "update_optimize_recommendation", "list_optimize_recommendations", "get_optimize_recommendation", "add_optimize_comment", "list_optimize_comments", "analyze_intent_overlap"] },
-] as const;
+const MODULES = MCP_MODULES;
 
 const moduleKeySchema = z.enum(MODULES.map((m) => m.key) as [string, ...string[]]);
 

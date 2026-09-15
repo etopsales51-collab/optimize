@@ -4,6 +4,7 @@ export * from "./audit.schema";
 export * from "./optimize.schema";
 export * from "./publish.schema";
 export * from "./whatsapp.schema";
+export * from "./research-runs.schema";
 export * from "./sam.schema";
 export * from "./better-auth-schema";
 export * from "./billing.schema";
