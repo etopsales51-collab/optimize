@@ -20,10 +20,11 @@ import type { OptimizeProposal } from "@/shared/optimize";
  * the anti-cannibalization check that makes a brand new URL safe.
  *
  * WHAT IT WRITES, AND WHAT IT MUST NEVER WRITE
- * On an existing product, four things and no more:
+ * On an existing product, five things and no more:
  *
  *   proposal.title           -> rank_math_title        (the SEO title)
  *   proposal.metaDescription -> rank_math_description  (the meta description)
+ *   content_refresh sections -> description            (the approved body)
  *   status: draft -> publish, and only in that direction
  *   categories, and only when the product has none but Uncategorized
  *
@@ -61,6 +62,7 @@ export type ResolvedProduct = {
   categories: ProductCategory[];
   currentSeoTitle: string;
   currentSeoDescription: string;
+  currentDescription: string;
 };
 
 export type PlannedField =
@@ -109,6 +111,8 @@ export type PublishOptions = {
    * carries the cannibalization check. Everything else must find its target.
    */
   allowCreate: boolean;
+  /** A content_refresh replaces the existing product description after approval. */
+  updateContent?: boolean;
 };
 
 const REQUEST_TIMEOUT_MS = 20_000;
@@ -352,7 +356,10 @@ export async function ensureBrandCategory(
     code?: string;
     data?: { resource_id?: number };
   };
-  if (body.code === "term_exists" && typeof body.data?.resource_id === "number") {
+  if (
+    body.code === "term_exists" &&
+    typeof body.data?.resource_id === "number"
+  ) {
     return {
       ok: true,
       category: { id: body.data.resource_id, name: brand, slug: "", count: 0 },
@@ -382,9 +389,12 @@ function needsBrandCategory(target: ResolvedProduct): boolean {
 export async function resolveProduct(
   credentials: WooCredentials,
   targetUrl: string,
-): Promise<{ ok: true; target: ResolvedProduct } | { ok: false; reason: string }> {
+): Promise<
+  { ok: true; target: ResolvedProduct } | { ok: false; reason: string }
+> {
   const slug = slugFromUrl(targetUrl);
-  if (slug === null) return { ok: false, reason: `Not a valid URL: ${targetUrl}` };
+  if (slug === null)
+    return { ok: false, reason: `Not a valid URL: ${targetUrl}` };
   if (!slug) {
     return { ok: false, reason: "That URL has no product slug to resolve." };
   }
@@ -393,7 +403,8 @@ export async function resolveProduct(
     credentials,
     `/products?slug=${encodeURIComponent(slug)}&per_page=1&status=any`,
   );
-  if (!response.ok) return { ok: false, reason: await describeFailure(response) };
+  if (!response.ok)
+    return { ok: false, reason: await describeFailure(response) };
 
   const rows = (await response.json().catch(() => [])) as Array<{
     id?: number;
@@ -402,6 +413,7 @@ export async function resolveProduct(
     status?: string;
     categories?: unknown;
     meta_data?: MetaRow[];
+    description?: string;
   }>;
   const row = Array.isArray(rows) ? rows[0] : undefined;
   if (!row?.id) {
@@ -421,6 +433,7 @@ export async function resolveProduct(
       categories: parseCategories(row.categories),
       currentSeoTitle: readMeta(row.meta_data, "rank_math_title"),
       currentSeoDescription: readMeta(row.meta_data, "rank_math_description"),
+      currentDescription: row.description ?? "",
     },
   };
 }
@@ -442,7 +455,10 @@ function planMetaChanges(
   }
 
   const nextDescription = proposal.metaDescription?.after?.trim();
-  if (nextDescription && nextDescription !== target.currentSeoDescription.trim()) {
+  if (
+    nextDescription &&
+    nextDescription !== target.currentSeoDescription.trim()
+  ) {
     changes.push({
       field: "rank_math_description",
       label: "Meta description",
@@ -483,7 +499,8 @@ export async function plan(
   options: PublishOptions,
 ): Promise<PublishPlan> {
   const slug = slugFromUrl(targetUrl);
-  if (slug === null) return { ok: false, reason: `Not a valid URL: ${targetUrl}` };
+  if (slug === null)
+    return { ok: false, reason: `Not a valid URL: ${targetUrl}` };
   if (!slug) return { ok: false, reason: "That URL has no product slug." };
 
   const existing = await resolveProduct(credentials, targetUrl);
@@ -492,6 +509,20 @@ export async function plan(
   if (existing.ok) {
     const target = existing.target;
     const changes = planMetaChanges(proposal, target);
+    const description = buildDescription(proposal);
+
+    if (
+      options.updateContent &&
+      description &&
+      target.currentDescription.trim() !== description.trim()
+    ) {
+      changes.push({
+        field: "description",
+        label: "Body content",
+        before: target.currentDescription,
+        after: description,
+      });
+    }
 
     if (target.status === "draft") {
       changes.push({
@@ -509,7 +540,8 @@ export async function plan(
         changes.push({
           field: "categories",
           label: "Category",
-          before: target.categories.map((row) => row.name).join(", ") || "(none)",
+          before:
+            target.categories.map((row) => row.name).join(", ") || "(none)",
           after: category ? category.name : `${brand} (will be created)`,
         });
       }
@@ -675,7 +707,8 @@ async function createProduct(
     }),
   });
 
-  if (!response.ok) return { ok: false, reason: await describeFailure(response) };
+  if (!response.ok)
+    return { ok: false, reason: await describeFailure(response) };
 
   const created = (await response.json().catch(() => ({}))) as {
     id?: number;
@@ -720,6 +753,7 @@ async function createProduct(
       categories: category?.ok ? [category.category] : [],
       currentSeoTitle: "",
       currentSeoDescription: "",
+      currentDescription: buildDescription(proposal),
     },
     applied,
     revisionHint: `Created and published product ${created.id}. Add price, SKU and images in WordPress.${categoryNote}`,
@@ -736,13 +770,18 @@ async function updateProduct(
   // Allowlist, built field by field. Nothing else can enter this body — in
   // particular no name, price, stock_status, sku or images.
   const metaData = changes
-    .filter((change) =>
-      WRITABLE_META.includes(change.field as WritableMetaKey),
-    )
-    .map((change) => ({ key: change.field as WritableMetaKey, value: change.after }));
+    .filter((change) => WRITABLE_META.includes(change.field as WritableMetaKey))
+    .map((change) => ({
+      key: change.field as WritableMetaKey,
+      value: change.after,
+    }));
 
   const body: Record<string, unknown> = {};
   if (metaData.length > 0) body.meta_data = metaData;
+  const descriptionChange = changes.find(
+    (change) => change.field === "description",
+  );
+  if (descriptionChange) body.description = descriptionChange.after;
 
   // Only ever draft -> publish. A live product is never taken down from here.
   if (
@@ -752,13 +791,17 @@ async function updateProduct(
     body.status = "publish";
   }
 
-  const categoryChange = changes.find((change) => change.field === "categories");
+  const categoryChange = changes.find(
+    (change) => change.field === "categories",
+  );
   let categoryNote = "";
   if (categoryChange && needsBrandCategory(target)) {
     // Same inputs the plan used, so the preview and the write cannot disagree
     // about which brand this is.
     const brand = inferBrand(proposal, target.name);
-    const resolved = brand ? await ensureBrandCategory(credentials, brand) : null;
+    const resolved = brand
+      ? await ensureBrandCategory(credentials, brand)
+      : null;
     if (resolved?.ok) {
       // Replacing the whole set is the intent here: the only thing being
       // replaced is Uncategorized, or nothing at all.
@@ -785,7 +828,20 @@ async function updateProduct(
     method: "PUT",
     body: JSON.stringify(body),
   });
-  if (!response.ok) return { ok: false, reason: await describeFailure(response) };
+  if (!response.ok)
+    return { ok: false, reason: await describeFailure(response) };
+
+  if (descriptionChange) {
+    const verified = await resolveProduct(credentials, target.permalink);
+    if (!verified.ok) return verified;
+    if (!verified.target.currentDescription.includes(descriptionChange.after)) {
+      return {
+        ok: false,
+        reason:
+          "WooCommerce accepted the request but the saved product does not contain the new body.",
+      };
+    }
+  }
 
   return {
     ok: true,

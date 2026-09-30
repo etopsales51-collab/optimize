@@ -126,7 +126,9 @@ async function createRecommendation(input: {
   // Publishable copy is cleaned on the way in, so what is stored is already the
   // customer's version. `notes` is untouched — that is where the agent's
   // working detail belongs, and nothing publishes it.
-  const cleaned = sanitizeProposalCopy(data.proposal);
+  const cleaned = sanitizeProposalCopy(data.proposal, {
+    siteUrl: data.targetUrl,
+  });
   const { removals } = cleaned;
   // Image links from a generator expire; keep the app's own copy.
   const proposal = await storeProposalImages(input.projectId, cleaned.proposal);
@@ -149,7 +151,9 @@ async function createRecommendation(input: {
     proposal,
     cannibalizationCheck: data.cannibalizationCheck,
     pageSnapshot: data.pageSnapshot ?? null,
-    previewHtml: sanitizePreviewHtml(input.previewHtml) || null,
+    previewHtml:
+      sanitizePreviewHtml(input.previewHtml, { siteUrl: data.targetUrl }) ||
+      null,
     createdByAgent: input.actor.id,
   });
 
@@ -220,8 +224,7 @@ async function updateRecommendation(input: {
   const patch = updateRecommendationSchema.parse(input.payload);
 
   const nextType = patch.type ?? existing.type;
-  const nextCheck =
-    patch.cannibalizationCheck ??
+  const nextCheck = patch.cannibalizationCheck ??
     existing.cannibalizationCheck ?? {
       status: "overlap_found" as const,
       method: "manual" as const,
@@ -256,11 +259,16 @@ async function updateRecommendation(input: {
   const sanitized =
     patch.proposal === undefined
       ? null
-      : sanitizeProposalCopy(patch.proposal);
+      : sanitizeProposalCopy(patch.proposal, {
+          siteUrl: patch.targetUrl ?? existing.targetUrl,
+        });
   const cleaned = sanitized
     ? {
         ...sanitized,
-        proposal: await storeProposalImages(input.projectId, sanitized.proposal),
+        proposal: await storeProposalImages(
+          input.projectId,
+          sanitized.proposal,
+        ),
       }
     : null;
 
@@ -279,7 +287,9 @@ async function updateRecommendation(input: {
     previewHtml:
       input.previewHtml === undefined
         ? undefined
-        : sanitizePreviewHtml(input.previewHtml) || null,
+        : sanitizePreviewHtml(input.previewHtml, {
+            siteUrl: patch.targetUrl ?? existing.targetUrl,
+          }) || null,
   });
 
   // The revision note becomes the agent's turn in the thread, so staff see what

@@ -73,7 +73,9 @@ describe("process talk in body copy", () => {
       "<p>IK09 vandal-proof housing. Flag for Walid: confirm the IP rating.</p>",
     );
 
-    expect(proposal.sections[0].after).toBe("<p>IK09 vandal-proof housing.</p>");
+    expect(proposal.sections[0].after).toBe(
+      "<p>IK09 vandal-proof housing.</p>",
+    );
   });
 
   it("does not eat 'verify' where it is what the product does", () => {
@@ -87,6 +89,13 @@ describe("process talk in body copy", () => {
 });
 
 describe("plain fields", () => {
+  it("still trims plain fields after removing markup", () => {
+    const { proposal } = sanitizeProposalCopy(
+      proposalWith({ title: { before: "", after: "<strong>Buy now</strong>" } }),
+    );
+    expect(proposal.title?.after).toBe("Buy now");
+  });
+
   it("strips process notes and markup from the SEO title and meta", () => {
     const { proposal } = sanitizeProposalCopy(
       proposalWith({
@@ -119,7 +128,9 @@ describe("staff-only fields", () => {
   it("leaves notes exactly as written — that is where verification belongs", () => {
     const notes =
       "Portfolio row says Outdoor; marketing says Indoor. Flag for Walid to verify before publish.";
-    const { proposal, removals } = sanitizeProposalCopy(proposalWith({ notes }));
+    const { proposal, removals } = sanitizeProposalCopy(
+      proposalWith({ notes }),
+    );
 
     expect(proposal.notes).toBe(notes);
     expect(removals).toEqual([]);
@@ -127,6 +138,22 @@ describe("staff-only fields", () => {
 });
 
 describe("publishable markup is sanitized, not just de-noised", () => {
+  it("preserves spaces around inline markup byte for byte", () => {
+    const html =
+      '<p><strong>A</strong> b <a href="https://www.etopme.ae/x/">c</a> d</p>';
+    const { proposal } = sanitizeProposalCopy(
+      proposalWith({
+        sections: [{ heading: "", action: "add", after: html }],
+      }),
+      { siteUrl: "https://etopme.ae" },
+    );
+
+    expect(proposal.sections[0].after).toBe(html);
+    expect(proposal.sections[0].after).not.toMatch(
+      /<\/(strong|a|em|b|i)>[A-Za-z]/,
+    );
+  });
+
   it("removes script from a section, which is rendered to the approver", () => {
     // sections[].after reaches dangerouslySetInnerHTML in the review UI, so an
     // agent's markup runs in the session of the person about to click Approve.

@@ -33,6 +33,7 @@ const productRow = {
   price: "1450",
   stock_status: "instock",
   status: "publish",
+  description: "<p>Old body</p>",
   categories: [
     { id: 17, name: "Signature Pads", slug: "signature-pads", count: 12 },
   ],
@@ -58,7 +59,8 @@ const proposal: OptimizeProposal = {
   notes: "",
 };
 
-const PRODUCT_URL = "https://wacomme.ae/product/wacom-stu-430-lcd-signature-pad/";
+const PRODUCT_URL =
+  "https://wacomme.ae/product/wacom-stu-430-lcd-signature-pad/";
 const UPDATE = { allowCreate: false };
 const CREATE = { allowCreate: true };
 
@@ -84,6 +86,7 @@ function mockStore(options: {
   writeStatus?: number;
 }) {
   const bodies: Record<string, unknown>[] = [];
+  let currentProduct = options.product ? { ...options.product } : null;
   const spy = mockFetch((url, init) => {
     const method = init?.method ?? "GET";
 
@@ -101,7 +104,7 @@ function mockStore(options: {
     }
 
     if (method === "GET") {
-      return Response.json(options.product ? [options.product] : []);
+      return Response.json(currentProduct ? [currentProduct] : []);
     }
 
     const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
@@ -110,10 +113,17 @@ function mockStore(options: {
     if (options.writeStatus) {
       return new Response("error", { status: options.writeStatus });
     }
-    return Response.json({ ...(options.product ?? {}), id: 900, ...body });
+    currentProduct = { ...(currentProduct ?? {}), id: 900, ...body };
+    return Response.json(currentProduct);
   });
 
-  return { spy, bodies, get body() { return bodies[0] ?? null; } };
+  return {
+    spy,
+    bodies,
+    get body() {
+      return bodies[0] ?? null;
+    },
+  };
 }
 
 afterEach(() => {
@@ -210,8 +220,9 @@ describe("publish — updating an existing product", () => {
     expect(result).toMatchObject({ ok: true, mode: "update" });
     expect(Object.keys(store.body ?? {})).toEqual(["meta_data"]);
 
-    const metaData = (store.body as unknown as { meta_data: Array<{ key: string }> })
-      .meta_data;
+    const metaData = (
+      store.body as unknown as { meta_data: Array<{ key: string }> }
+    ).meta_data;
     expect(metaData.map((row) => row.key).sort()).toEqual([
       "rank_math_description",
       "rank_math_title",
@@ -255,6 +266,17 @@ describe("publish — updating an existing product", () => {
     await publish(credentials, PRODUCT_URL, proposal, UPDATE);
     expect(store.body).not.toHaveProperty("description");
     expect(store.body).not.toHaveProperty("short_description");
+  });
+
+  it("writes and verifies approved body content for a content refresh", async () => {
+    const store = mockStore({ product: productRow });
+    const result = await publish(credentials, PRODUCT_URL, proposal, {
+      allowCreate: false,
+      updateContent: true,
+    });
+
+    expect(result).toMatchObject({ ok: true, mode: "update" });
+    expect(store.body?.description).toBe("<h2>Specs</h2>\n<p>New body</p>");
   });
 
   it("uses PUT against the resolved product id", async () => {
@@ -311,8 +333,18 @@ describe("publish — updating an existing product", () => {
         ],
       },
       categories: [
-        { id: 16, name: "Nitgen Biometric Devices", slug: "nitgen-biometric-devices", count: 9 },
-        { id: 44, name: "Nitgen Fingerprint Scanners", slug: "nitgen-fingerprint-scanners", count: 0 },
+        {
+          id: 16,
+          name: "Nitgen Biometric Devices",
+          slug: "nitgen-biometric-devices",
+          count: 9,
+        },
+        {
+          id: 44,
+          name: "Nitgen Fingerprint Scanners",
+          slug: "nitgen-fingerprint-scanners",
+          count: 0,
+        },
       ],
     });
 
@@ -353,15 +385,25 @@ describe("publish — updating an existing product", () => {
 describe("publish — creating from a new page brief", () => {
   const brief: OptimizeProposal = {
     title: { before: "", after: "ViRDi AC-5000 IK UAE | Outdoor Fingerprint" },
-    metaDescription: { before: "", after: "Buy the ViRDi AC-5000 IK in the UAE." },
-    h1: { before: "", after: "ViRDi AC-5000 IK — Outdoor Fingerprint Terminal" },
+    metaDescription: {
+      before: "",
+      after: "Buy the ViRDi AC-5000 IK in the UAE.",
+    },
+    h1: {
+      before: "",
+      after: "ViRDi AC-5000 IK — Outdoor Fingerprint Terminal",
+    },
     sections: [
       {
         heading: "Product overview",
         action: "add",
         after: "<p>Built for harsh sites.</p>",
       },
-      { heading: "Key specifications", action: "add", after: "<p>IP65 / IK09</p>" },
+      {
+        heading: "Key specifications",
+        action: "add",
+        after: "<p>IP65 / IK09</p>",
+      },
     ],
     internalLinks: [],
     attachments: [],
@@ -427,7 +469,12 @@ describe("publish — creating from a new page brief", () => {
 
   it("refuses a brief with no H1, since there is no product name", async () => {
     mockStore({ product: null });
-    const result = await publish(credentials, NEW_URL, { ...brief, h1: undefined }, CREATE);
+    const result = await publish(
+      credentials,
+      NEW_URL,
+      { ...brief, h1: undefined },
+      CREATE,
+    );
     expect(result).toMatchObject({ ok: false });
     if (!result.ok) expect(result.reason).toContain("no H1");
   });
@@ -458,13 +505,26 @@ describe("inferBrand", () => {
 
 describe("matchBrandCategory", () => {
   const categories: ProductCategory[] = [
-    { id: 16, name: "Nitgen Biometric Devices", slug: "nitgen-biometric-devices", count: 9 },
-    { id: 44, name: "Nitgen Fingerprint Scanners", slug: "nitgen-fingerprint-scanners", count: 0 },
+    {
+      id: 16,
+      name: "Nitgen Biometric Devices",
+      slug: "nitgen-biometric-devices",
+      count: 9,
+    },
+    {
+      id: 44,
+      name: "Nitgen Fingerprint Scanners",
+      slug: "nitgen-fingerprint-scanners",
+      count: 0,
+    },
     { id: 15, name: "Uncategorized", slug: "uncategorized", count: 1 },
   ];
 
   it("prefers an exact category over one that merely contains the brand", () => {
-    const exact = [...categories, { id: 90, name: "Nitgen", slug: "nitgen", count: 0 }];
+    const exact = [
+      ...categories,
+      { id: 90, name: "Nitgen", slug: "nitgen", count: 0 },
+    ];
     expect(matchBrandCategory(exact, "nitgen")?.id).toBe(90);
   });
 

@@ -61,20 +61,37 @@ const ALLOWED_TAGS = new Set([
   "dl",
   "dt",
   "dd",
+  "details",
+  "summary",
 ]);
 
 // Void elements must not be given a closing tag.
 const VOID_TAGS = new Set(["br", "hr", "img"]);
 
 // Per-tag attribute allowlist. Deliberately tiny: no style (CSS can exfiltrate
-// and can cover the page), no class (could borrow app styling to fake UI), no
-// id (can break the host document), and no event handlers of any kind.
+// and can cover the page), no id (can break the host document), and no event
+// handlers. Only publisher-owned etop-/nv- classes are kept below.
 const ALLOWED_ATTRS: Record<string, Set<string>> = {
-  a: new Set(["href", "title"]),
+  a: new Set(["href", "title", "target", "rel"]),
   img: new Set(["src", "alt", "title", "width", "height"]),
   th: new Set(["colspan", "rowspan", "scope"]),
   td: new Set(["colspan", "rowspan"]),
 };
+
+const CLASS_TAGS = new Set([
+  "article",
+  "details",
+  "div",
+  "ol",
+  "p",
+  "section",
+  "span",
+  "summary",
+  "table",
+  "ul",
+]);
+
+const SAFE_CLASS = /^(?:etop-|nv-)[A-Za-z0-9_-]*$/;
 
 // Schemes permitted in href/src. `javascript:` and `data:` are the two that
 // turn a link or an image into script execution.
@@ -101,10 +118,59 @@ function isSafeUrl(value: string): boolean {
   return SAFE_URL.test(value.trim());
 }
 
-export function sanitizePreviewHtml(input: string | null | undefined): string {
+function siteHost(siteUrl: string | null | undefined): string | null {
+  if (!siteUrl) return null;
+  try {
+    return new URL(siteUrl).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+function linkKind(
+  href: string,
+  baseHost: string | null,
+): "internal" | "external" | "other" {
+  const value = href.trim();
+  if (value.startsWith("/") || value.startsWith("#")) return "internal";
+  if (!/^https?:\/\//i.test(value)) return "other";
+  try {
+    const host = new URL(value).hostname.toLowerCase().replace(/^www\./, "");
+    return baseHost && host === baseHost ? "internal" : "external";
+  } catch {
+    return "other";
+  }
+}
+
+function safeClassValue(value: string): string {
+  return value
+    .split(/\s+/)
+    .filter((name) => SAFE_CLASS.test(name))
+    .join(" ");
+}
+
+function safeTarget(value: string): string | null {
+  const normalized = value.trim().toLowerCase();
+  return ["_blank", "_self", "_parent", "_top"].includes(normalized)
+    ? normalized
+    : null;
+}
+
+function safeRelTokens(value: string): string[] {
+  return value
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((token) => /^[a-z][a-z0-9_-]*$/.test(token));
+}
+
+export function sanitizePreviewHtml(
+  input: string | null | undefined,
+  options: { siteUrl?: string | null } = {},
+): string {
   if (!input) return "";
 
   const out: string[] = [];
+  const baseHost = siteHost(options.siteUrl);
   // Tags we opened and must close, so unbalanced agent markup cannot leak into
   // the surrounding page.
   const openStack: string[] = [];
@@ -136,6 +202,7 @@ export function sanitizePreviewHtml(input: string | null | undefined): string {
           for (const [rawKey, rawValue] of Object.entries(attribs)) {
             const key = rawKey.toLowerCase();
             if (!allowed.has(key)) continue;
+            if (tag === "a" && (key === "target" || key === "rel")) continue;
             const value = String(rawValue ?? "");
             if ((key === "href" || key === "src") && !isSafeUrl(value)) {
               continue;
@@ -144,9 +211,32 @@ export function sanitizePreviewHtml(input: string | null | undefined): string {
           }
         }
 
-        if (tag === "a") {
-          // Agent-supplied links point off-site; never hand them window.opener.
-          parts.push('target="_blank"', 'rel="noopener noreferrer nofollow"');
+        if (CLASS_TAGS.has(tag)) {
+          const className = safeClassValue(String(attribs.class ?? ""));
+          if (className) parts.push(`class="${escapeAttr(className)}"`);
+        }
+
+        if (tag === "a" && typeof attribs.href === "string") {
+          const kind = linkKind(attribs.href, baseHost);
+          const sourceTarget = safeTarget(String(attribs.target ?? ""));
+          const rel = safeRelTokens(String(attribs.rel ?? ""));
+
+          if (kind === "external") {
+            parts.push(`target="${sourceTarget ?? "_blank"}"`);
+            for (const required of ["noopener", "noreferrer"]) {
+              if (!rel.includes(required)) rel.push(required);
+            }
+          } else if (sourceTarget) {
+            parts.push(`target="${sourceTarget}"`);
+          }
+
+          const keptRel =
+            kind === "internal"
+              ? rel.filter((token) => token !== "nofollow")
+              : rel;
+          if (keptRel.length > 0) {
+            parts.push(`rel="${escapeAttr([...new Set(keptRel)].join(" "))}"`);
+          }
         }
 
         out.push(`<${parts.join(" ")}>`);
@@ -180,7 +270,11 @@ export function sanitizePreviewHtml(input: string | null | undefined): string {
     },
     // Agent output is a fragment, and decodeEntities makes "&lt;script&gt;"
     // resolve to text we then re-escape, rather than to a live tag.
-    { decodeEntities: true, lowerCaseTags: true, lowerCaseAttributeNames: true },
+    {
+      decodeEntities: true,
+      lowerCaseTags: true,
+      lowerCaseAttributeNames: true,
+    },
   );
 
   parser.write(input);

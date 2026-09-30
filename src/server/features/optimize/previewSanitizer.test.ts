@@ -28,9 +28,9 @@ describe("sanitizePreviewHtml", () => {
   });
 
   it("strips javascript: urls, including ones hiding control characters", () => {
-    expect(sanitizePreviewHtml(`<a href="javascript:alert(1)">x</a>`)).not.toContain(
-      "javascript",
-    );
+    expect(
+      sanitizePreviewHtml(`<a href="javascript:alert(1)">x</a>`),
+    ).not.toContain("javascript");
     // Browsers ignore the tab when resolving the scheme; a prefix test alone
     // would let this through.
     expect(
@@ -45,10 +45,29 @@ describe("sanitizePreviewHtml", () => {
     expect(out).not.toContain("data:");
   });
 
-  it("keeps safe links but neutralises the tab-nabbing vector", () => {
+  it("keeps external links safe without inventing nofollow", () => {
     const out = sanitizePreviewHtml(`<a href="https://example.com">go</a>`);
     expect(out).toContain('href="https://example.com"');
-    expect(out).toContain('rel="noopener noreferrer nofollow"');
+    expect(out).toContain('target="_blank"');
+    expect(out).toContain('rel="noopener noreferrer"');
+    expect(out).not.toContain("nofollow");
+  });
+
+  it("leaves internal links plain and treats www as the same host", () => {
+    const html = `<p><a href="https://www.etopme.ae/x/">one</a> or <a href="/y/">two</a></p>`;
+    expect(sanitizePreviewHtml(html, { siteUrl: "https://etopme.ae" })).toBe(
+      html,
+    );
+  });
+
+  it("removes an injected nofollow from an internal link", () => {
+    const out = sanitizePreviewHtml(
+      `<a href="https://etopme.ae/x/" target="_self" rel="nofollow sponsored">go</a>`,
+      { siteUrl: "https://www.etopme.ae" },
+    );
+    expect(out).toBe(
+      `<a href="https://etopme.ae/x/" target="_self" rel="sponsored">go</a>`,
+    );
   });
 
   it("drops style and class so agent markup cannot impersonate app UI", () => {
@@ -56,6 +75,18 @@ describe("sanitizePreviewHtml", () => {
       `<p style="position:fixed;inset:0" class="btn btn-primary">Approve</p>`,
     );
     expect(out).toBe("<p>Approve</p>");
+  });
+
+  it("keeps publisher classes and FAQ disclosure markup", () => {
+    const out = sanitizePreviewHtml(
+      `<div class="nv-faq btn"><details class="etop-article"><summary>Answer</summary></details></div><table class="nv-spec"><tr><td>X</td></tr></table>`,
+    );
+    expect(out).toContain('<div class="nv-faq">');
+    expect(out).toContain(
+      '<details class="etop-article"><summary>Answer</summary></details>',
+    );
+    expect(out).toContain('<table class="nv-spec">');
+    expect(out).not.toContain("btn");
   });
 
   it("escapes text so encoded markup cannot become live markup", () => {

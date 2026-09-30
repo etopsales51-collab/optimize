@@ -99,7 +99,8 @@ function stripRun(
   // 1. Bracketed asides: "(portfolio row; …)" and "[verify before publish]".
   text = text.replace(/\s*[([]([^()[\]]*)[)\]]/g, (match, inner: string) => {
     const drop =
-      hasMarker(inner) || (options.cell && inner.trim().length > CELL_ASIDE_MAX);
+      hasMarker(inner) ||
+      (options.cell && inner.trim().length > CELL_ASIDE_MAX);
     if (drop) removed.push(match.trim());
     return drop ? "" : match;
   });
@@ -128,14 +129,23 @@ function stripRun(
       .join("");
   }
 
-  return collapse(text);
+  // Most runs are customer copy, not process notes. Returning the original
+  // bytes when nothing was removed is essential: trimming each parser text
+  // node turns `<strong>A</strong> b` into `<strong>A</strong>b`.
+  return text === value ? value : collapse(text);
 }
 
 /** Text only — used for title, metaDescription and h1, which carry no markup. */
-function stripPlain(value: string, field: string, removals: CopyRemoval[]): string {
+function stripPlain(
+  value: string,
+  field: string,
+  removals: CopyRemoval[],
+): string {
   const removed: string[] = [];
   // These land in <title> and <meta>, where a tag is never wanted.
-  const text = stripRun(value.replace(/<[^>]*>/g, " "), { cell: false }, removed);
+  const text = collapse(
+    stripRun(value.replace(/<[^>]*>/g, " "), { cell: false }, removed),
+  );
   for (const item of removed) removals.push({ field, text: item });
   return text;
 }
@@ -165,8 +175,9 @@ export function sanitizeSectionHtml(
   input: string,
   field: string,
   removals: CopyRemoval[],
+  options: { siteUrl?: string | null } = {},
 ): string {
-  const safe = sanitizePreviewHtml(input);
+  const safe = sanitizePreviewHtml(input, options);
   if (!safe) return "";
 
   const removed: string[] = [];
@@ -177,7 +188,8 @@ export function sanitizeSectionHtml(
     (_match, tag: string | undefined, text: string | undefined) => {
       if (tag !== undefined) {
         if (/^<(td|th)\b/i.test(tag)) cellDepth += 1;
-        else if (/^<\/(td|th)>/i.test(tag)) cellDepth = Math.max(0, cellDepth - 1);
+        else if (/^<\/(td|th)>/i.test(tag))
+          cellDepth = Math.max(0, cellDepth - 1);
         return tag;
       }
       return stripRun(text ?? "", { cell: cellDepth > 0 }, removed);
@@ -194,7 +206,10 @@ export function sanitizeSectionHtml(
  * `notes` is passed through untouched: it is where the verification the agent
  * owes staff belongs, and nothing publishes it.
  */
-export function sanitizeProposalCopy(proposal: OptimizeProposal): {
+export function sanitizeProposalCopy(
+  proposal: OptimizeProposal,
+  options: { siteUrl?: string | null } = {},
+): {
   proposal: OptimizeProposal;
   removals: CopyRemoval[];
 } {
@@ -216,7 +231,11 @@ export function sanitizeProposalCopy(proposal: OptimizeProposal): {
       h1: plainPair(proposal.h1, "h1"),
       sections: (proposal.sections ?? []).map((section, index) => ({
         ...section,
-        heading: stripPlain(section.heading, `sections[${index}].heading`, removals),
+        heading: stripPlain(
+          section.heading,
+          `sections[${index}].heading`,
+          removals,
+        ),
         after:
           section.after === undefined
             ? undefined
@@ -224,6 +243,7 @@ export function sanitizeProposalCopy(proposal: OptimizeProposal): {
                 section.after,
                 `sections[${index}].after`,
                 removals,
+                options,
               ),
       })),
     },

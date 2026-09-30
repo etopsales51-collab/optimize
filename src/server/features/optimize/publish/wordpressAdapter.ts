@@ -1,5 +1,6 @@
 import { buildArticleBodyHtml } from "@/shared/articleHtml";
 import type { ArticleImage, OptimizeProposal } from "@/shared/optimize";
+import { z } from "zod";
 
 /**
  * WordPress REST adapter for pages and blog posts: every URL that is not a
@@ -13,13 +14,13 @@ import type { ArticleImage, OptimizeProposal } from "@/shared/optimize";
  * recommendation's type only decides whether creating is PERMITTED.
  *
  * WHAT IT WRITES
- * On an existing post or page, the same narrow set as products:
+ * On an existing post or page:
  *   proposal.title           -> rank_math_title
  *   proposal.metaDescription -> rank_math_description
  *   primaryQuery             -> rank_math_focus_keyword
+ *   content_refresh sections -> body content
  *   status: draft -> publish, and only in that direction
- * Never its title, body, author, slug or date: body sections on an existing
- * page are applied by hand, as for products.
+ * It never changes the title, author, slug or date.
  *
  * A new one is created from a brief: its images are uploaded to the media
  * library first (the hero becomes the featured image), then the post, with its
@@ -68,6 +69,8 @@ export type ResolvedContent = {
   title: string;
   link: string;
   status: string;
+  modifiedGmt: string | null;
+  contentRaw: string;
 };
 
 export type WpPlan =
@@ -87,6 +90,8 @@ export type LoadedImage = { bytes: ArrayBuffer; contentType: string };
 export type WpPublishOptions = {
   allowCreate: boolean;
   focusKeyword?: string | null;
+  /** A content_refresh replaces the existing WordPress body after approval. */
+  updateContent?: boolean;
   /** Reads the stored bytes of an image; null when it has none yet. */
   loadImage?: (image: ArticleImage) => Promise<LoadedImage | null>;
 };
@@ -103,6 +108,13 @@ export type WpApplyResult =
 
 const REQUEST_TIMEOUT_MS = 20_000;
 const ANY_STATUS = "publish,future,draft,pending,private";
+
+const verifiedBodySchema = z.object({
+  modified_gmt: z.string().optional(),
+  content: z
+    .object({ raw: z.string().optional(), rendered: z.string().optional() })
+    .optional(),
+});
 
 type Category = { id: number; name: string; count: number };
 
@@ -179,28 +191,34 @@ export async function resolveContent(
   credentials: WordpressCredentials,
   targetUrl: string,
 ): Promise<
-  | { ok: true; target: ResolvedContent | null }
-  | { ok: false; reason: string }
+  { ok: true; target: ResolvedContent | null } | { ok: false; reason: string }
 > {
   const segments = pathSegments(targetUrl);
-  if (segments === null) return { ok: false, reason: `Not a valid URL: ${targetUrl}` };
+  if (segments === null)
+    return { ok: false, reason: `Not a valid URL: ${targetUrl}` };
   const slug = segments[segments.length - 1];
   if (!slug) {
-    return { ok: false, reason: "That URL is the home page, which is not published from here." };
+    return {
+      ok: false,
+      reason: "That URL is the home page, which is not published from here.",
+    };
   }
 
   for (const kind of ["post", "page"] as const) {
     const response = await wpFetch(
       credentials,
-      `/wp/v2/${kind}s?slug=${encodeURIComponent(slug)}&status=${ANY_STATUS}&context=edit&per_page=10&_fields=id,link,status,title`,
+      `/wp/v2/${kind}s?slug=${encodeURIComponent(slug)}&status=${ANY_STATUS}&context=edit&per_page=10&_fields=id,link,status,title,modified_gmt,content`,
     );
-    if (!response.ok) return { ok: false, reason: await describeFailure(response) };
+    if (!response.ok)
+      return { ok: false, reason: await describeFailure(response) };
 
     const rows = (await response.json().catch(() => [])) as Array<{
       id?: number;
       link?: string;
       status?: string;
       title?: { raw?: string; rendered?: string };
+      modified_gmt?: string;
+      content?: { raw?: string; rendered?: string };
     }>;
     if (!Array.isArray(rows) || rows.length === 0) continue;
 
@@ -220,6 +238,8 @@ export async function resolveContent(
         title: row.title?.raw ?? decodeEntities(row.title?.rendered ?? ""),
         link: row.link ?? targetUrl,
         status: row.status ?? "publish",
+        modifiedGmt: row.modified_gmt ?? null,
+        contentRaw: row.content?.raw ?? row.content?.rendered ?? "",
       },
     };
   }
@@ -273,7 +293,9 @@ async function postPathPrefix(
     "/wp/v2/posts?per_page=1&status=publish&_fields=link",
   );
   if (!response.ok) return null;
-  const rows = (await response.json().catch(() => [])) as Array<{ link?: string }>;
+  const rows = (await response.json().catch(() => [])) as Array<{
+    link?: string;
+  }>;
   const segments = rows[0]?.link ? pathSegments(rows[0].link) : null;
   if (!segments || segments.length === 0) return null;
   const prefix = segments.slice(0, -1);
@@ -334,7 +356,13 @@ async function findPostCategory(
   }>;
   const categories = (Array.isArray(rows) ? rows : []).flatMap((row) =>
     typeof row.id === "number"
-      ? [{ id: row.id, name: decodeEntities(row.name ?? ""), count: row.count ?? 0 }]
+      ? [
+          {
+            id: row.id,
+            name: decodeEntities(row.name ?? ""),
+            count: row.count ?? 0,
+          },
+        ]
       : [],
   );
   return matchPostCategory(categories, text);
@@ -352,7 +380,12 @@ function seoChanges(
   const changes: WpPlannedChange[] = [];
   const title = proposal.title?.after?.trim();
   if (title && title !== current.title) {
-    changes.push({ field: "rank_math_title", label: "SEO title", before: current.title, after: title });
+    changes.push({
+      field: "rank_math_title",
+      label: "SEO title",
+      before: current.title,
+      after: title,
+    });
   }
   const description = proposal.metaDescription?.after?.trim();
   if (description && description !== current.description) {
@@ -395,10 +428,39 @@ export async function plan(
         ? await readLiveHead(target.link)
         : { title: "", description: "" };
     const changes = seoChanges(proposal, focusKeyword, current);
-    if (target.status === "draft" || target.status === "pending") {
-      changes.push({ field: "status", label: "Status", before: target.status, after: "publish" });
+    const body = buildArticleBodyHtml(proposal, {
+      imageSource: () => null,
+      placeholders: false,
+    });
+    if (
+      options.updateContent &&
+      body &&
+      target.contentRaw.trim() !== body.trim()
+    ) {
+      changes.push({
+        field: "content",
+        label: "Body content",
+        before: target.contentRaw,
+        after: body,
+      });
     }
-    return { ok: true, mode: "update", kind: target.kind, slug, target, categoryId: null, changes };
+    if (target.status === "draft" || target.status === "pending") {
+      changes.push({
+        field: "status",
+        label: "Status",
+        before: target.status,
+        after: "publish",
+      });
+    }
+    return {
+      ok: true,
+      mode: "update",
+      kind: target.kind,
+      slug,
+      target,
+      categoryId: null,
+      changes,
+    };
   }
 
   // ---- Create ------------------------------------------------------------
@@ -411,7 +473,11 @@ export async function plan(
 
   const title = proposal.h1?.after?.trim();
   if (!title) {
-    return { ok: false, reason: "This brief has no H1, so there is no title to create. Ask the agent to add one." };
+    return {
+      ok: false,
+      reason:
+        "This brief has no H1, so there is no title to create. Ask the agent to add one.",
+    };
   }
 
   const prefix = segments.slice(0, -1).join("/");
@@ -433,42 +499,73 @@ export async function plan(
       ? await findPostCategory(credentials, `${title} ${focusKeyword ?? ""}`)
       : null;
 
-  const body = buildArticleBodyHtml(proposal, { imageSource: () => null, placeholders: false });
-  const sectionCount = proposal.sections.filter((section) => section.after?.trim()).length;
+  const body = buildArticleBodyHtml(proposal, {
+    imageSource: () => null,
+    placeholders: false,
+  });
+  const sectionCount = proposal.sections.filter((section) =>
+    section.after?.trim(),
+  ).length;
   const images = proposal.images ?? [];
   const ready = images.filter((image) => image.assetId || image.url);
   const emptySlots = images.length - ready.length;
   const hasHero = ready.some((image) => image.role === "hero");
   const changes: WpPlannedChange[] = [
-    { field: "title", label: kind === "post" ? "Post title" : "Page title", before: "(does not exist)", after: title },
+    {
+      field: "title",
+      label: kind === "post" ? "Post title" : "Page title",
+      before: "(does not exist)",
+      after: title,
+    },
     ...(body
-      ? [{
-          field: "content" as const,
-          label: "Body content",
-          before: "",
-          after: `${sectionCount} section${sectionCount === 1 ? "" : "s"}`,
-        }]
+      ? [
+          {
+            field: "content" as const,
+            label: "Body content",
+            before: "",
+            after: `${sectionCount} section${sectionCount === 1 ? "" : "s"}`,
+          },
+        ]
       : []),
     ...(images.length
-      ? [{
-          field: "images" as const,
-          label: "Images",
-          before: "",
-          after: [
-            `${ready.length} to upload${hasHero ? " (hero as featured image)" : ""}`,
-            emptySlots ? `${emptySlots} empty slot${emptySlots === 1 ? "" : "s"} skipped` : "",
-          ]
-            .filter(Boolean)
-            .join(", "),
-        }]
+      ? [
+          {
+            field: "images" as const,
+            label: "Images",
+            before: "",
+            after: [
+              `${ready.length} to upload${hasHero ? " (hero as featured image)" : ""}`,
+              emptySlots
+                ? `${emptySlots} empty slot${emptySlots === 1 ? "" : "s"} skipped`
+                : "",
+            ]
+              .filter(Boolean)
+              .join(", "),
+          },
+        ]
       : []),
     ...(category
-      ? [{ field: "categories" as const, label: "Category", before: "(none)", after: category.name }]
+      ? [
+          {
+            field: "categories" as const,
+            label: "Category",
+            before: "(none)",
+            after: category.name,
+          },
+        ]
       : []),
     ...seoChanges(proposal, focusKeyword, { title: "", description: "" }),
   ];
 
-  return { ok: true, mode: "create", kind, slug, target: null, categoryId: category?.id ?? null, changes };
+  return {
+    ok: true,
+    mode: "create",
+    kind,
+    slug,
+    target: null,
+    categoryId: category?.id ?? null,
+    changes,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -509,7 +606,11 @@ async function uploadImages(
   slug: string,
   images: ArticleImage[],
   loadImage: WpPublishOptions["loadImage"],
-): Promise<{ sources: Map<string, string>; featuredId: number | null; notes: string[] }> {
+): Promise<{
+  sources: Map<string, string>;
+  featuredId: number | null;
+  notes: string[];
+}> {
   const sources = new Map<string, string>();
   const notes: string[] = [];
   let featuredId: number | null = null;
@@ -521,7 +622,10 @@ async function uploadImages(
       notes.push(`${image.slotId} could not be read`);
       continue;
     }
-    const extension = (loaded.contentType.split("/")[1] ?? "img").replace("jpeg", "jpg");
+    const extension = (loaded.contentType.split("/")[1] ?? "img").replace(
+      "jpeg",
+      "jpg",
+    );
     const upload = await wpFetch(credentials, "/wp/v2/media", {
       method: "POST",
       headers: {
@@ -531,7 +635,10 @@ async function uploadImages(
       body: loaded.bytes,
     });
     const media = upload.ok
-      ? ((await upload.json().catch(() => ({}))) as { id?: number; source_url?: string })
+      ? ((await upload.json().catch(() => ({}))) as {
+          id?: number;
+          source_url?: string;
+        })
       : {};
     if (!media.id || !media.source_url) {
       notes.push(`${image.slotId} was not uploaded (${upload.status})`);
@@ -540,13 +647,64 @@ async function uploadImages(
     // Alt text and caption are fields of the media item, not of the upload.
     await wpFetch(credentials, `/wp/v2/media/${media.id}`, {
       method: "POST",
-      body: JSON.stringify({ alt_text: image.alt, caption: image.caption ?? "" }),
+      body: JSON.stringify({
+        alt_text: image.alt,
+        caption: image.caption ?? "",
+      }),
     });
     sources.set(image.slotId, media.source_url);
     if (image.role === "hero") featuredId = media.id;
   }
 
   return { sources, featuredId, notes };
+}
+
+async function verifyBodyWrite(
+  credentials: WordpressCredentials,
+  kind: ContentKind,
+  id: number,
+  expectedBody: string,
+  previousModifiedGmt: string | null,
+): Promise<
+  { ok: true; modifiedGmt: string | null } | { ok: false; reason: string }
+> {
+  const response = await wpFetch(
+    credentials,
+    `/wp/v2/${kind}s/${id}?context=edit&_fields=id,modified_gmt,content`,
+  );
+  if (!response.ok) {
+    return {
+      ok: false,
+      reason: `WordPress accepted the write but it could not be verified: ${await describeFailure(response)}`,
+    };
+  }
+
+  const parsed = verifiedBodySchema.safeParse(
+    await response.json().catch(() => ({})),
+  );
+  const row = parsed.success ? parsed.data : {};
+  const savedBody = row.content?.raw ?? row.content?.rendered ?? "";
+  if (!savedBody.includes(expectedBody)) {
+    return {
+      ok: false,
+      reason:
+        "WordPress accepted the request but the saved post does not contain the new body.",
+    };
+  }
+
+  const modifiedGmt = row.modified_gmt ?? null;
+  if (
+    previousModifiedGmt &&
+    (!modifiedGmt || modifiedGmt <= previousModifiedGmt)
+  ) {
+    return {
+      ok: false,
+      reason:
+        "WordPress returned the new body but its modified time did not advance.",
+    };
+  }
+
+  return { ok: true, modifiedGmt };
 }
 
 /**
@@ -566,18 +724,50 @@ export async function publish(
 
   if (planned.mode === "update" && planned.target) {
     const target = planned.target;
+    const bodyChange = planned.changes.find(
+      (change) => change.field === "content",
+    );
+    const updateBody: Record<string, unknown> = {};
     if (planned.changes.some((change) => change.field === "status")) {
-      const response = await wpFetch(credentials, `${collection}/${target.id}`, {
-        method: "POST",
-        body: JSON.stringify({ status: "publish" }),
-      });
-      if (!response.ok) return { ok: false, reason: await describeFailure(response) };
+      updateBody.status = "publish";
+    }
+    if (bodyChange) updateBody.content = bodyChange.after;
+
+    if (Object.keys(updateBody).length > 0) {
+      const response = await wpFetch(
+        credentials,
+        `${collection}/${target.id}`,
+        {
+          method: "POST",
+          body: JSON.stringify(updateBody),
+        },
+      );
+      if (!response.ok)
+        return { ok: false, reason: await describeFailure(response) };
+    }
+
+    let verifiedModifiedGmt = target.modifiedGmt;
+    if (bodyChange) {
+      const verified = await verifyBodyWrite(
+        credentials,
+        target.kind,
+        target.id,
+        bodyChange.after,
+        target.modifiedGmt,
+      );
+      if (!verified.ok) return verified;
+      verifiedModifiedGmt = verified.modifiedGmt;
     }
     const seoNote = await writeSeoMeta(credentials, target.id, planned.changes);
     return {
       ok: true,
       mode: "update",
-      target: { ...target, status: "publish" },
+      target: {
+        ...target,
+        status: "publish",
+        modifiedGmt: verifiedModifiedGmt,
+        contentRaw: bodyChange?.after ?? target.contentRaw,
+      },
       applied: planned.changes,
       revisionHint: `${target.kind} ${target.id} (${target.title}). Previous SEO values are recorded in this recommendation's job events.${seoNote}`,
     };
@@ -590,24 +780,44 @@ export async function publish(
     proposal.images ?? [],
     options.loadImage,
   );
+  const expectedBody = buildArticleBodyHtml(proposal, {
+    imageSource: (image) => uploaded.sources.get(image.slotId) ?? null,
+    placeholders: false,
+  });
   const response = await wpFetch(credentials, collection, {
     method: "POST",
     body: JSON.stringify({
       title,
       slug: planned.slug,
       status: "publish",
-      content: buildArticleBodyHtml(proposal, {
-        imageSource: (image) => uploaded.sources.get(image.slotId) ?? null,
-        placeholders: false,
-      }),
+      content: expectedBody,
       ...(uploaded.featuredId ? { featured_media: uploaded.featuredId } : {}),
       ...(planned.categoryId ? { categories: [planned.categoryId] } : {}),
     }),
   });
-  if (!response.ok) return { ok: false, reason: await describeFailure(response) };
+  if (!response.ok)
+    return { ok: false, reason: await describeFailure(response) };
 
-  const created = (await response.json().catch(() => ({}))) as { id?: number; link?: string };
-  if (!created.id) return { ok: false, reason: "WordPress did not return an id for the new post." };
+  const created = (await response.json().catch(() => ({}))) as {
+    id?: number;
+    link?: string;
+  };
+  if (!created.id)
+    return {
+      ok: false,
+      reason: "WordPress did not return an id for the new post.",
+    };
+
+  const verified = expectedBody
+    ? await verifyBodyWrite(
+        credentials,
+        planned.kind,
+        created.id,
+        expectedBody,
+        null,
+      )
+    : { ok: true as const, modifiedGmt: null };
+  if (!verified.ok) return verified;
 
   const seoNote = await writeSeoMeta(credentials, created.id, planned.changes);
   const target: ResolvedContent = {
@@ -616,6 +826,8 @@ export async function publish(
     title,
     link: created.link ?? targetUrl,
     status: "publish",
+    modifiedGmt: verified.modifiedGmt,
+    contentRaw: expectedBody,
   };
   // WordPress changes a taken slug (adds -2); say so rather than let the
   // recommendation point at a URL that does not exist.

@@ -31,7 +31,9 @@ import { alertPublishResult } from "@/server/features/whatsapp/whatsappAlerts";
 export type CredentialStatus = "missing" | "ok" | "unreadable";
 
 /** Never reveals the secret — only whether it is there and still decryptable. */
-async function credentialStatus(sealed: string | null): Promise<CredentialStatus> {
+async function credentialStatus(
+  sealed: string | null,
+): Promise<CredentialStatus> {
   if (!sealed) return "missing";
   return (await openSecret(sealed)) ? "ok" : "unreadable";
 }
@@ -146,7 +148,9 @@ export async function saveSettings(input: {
       ...(input.wordpressBaseUrl !== undefined
         ? { wordpressBaseUrl: input.wordpressBaseUrl }
         : {}),
-      ...(input.wpUsername !== undefined ? { wpUsername: input.wpUsername } : {}),
+      ...(input.wpUsername !== undefined
+        ? { wpUsername: input.wpUsername }
+        : {}),
       ...(sealed !== undefined ? { wpAppPasswordSealed: sealed } : {}),
       ...(input.wooConsumerKey !== undefined
         ? { wooConsumerKey: input.wooConsumerKey }
@@ -155,7 +159,9 @@ export async function saveSettings(input: {
         ? { wooConsumerSecretSealed: sealedWoo }
         : {}),
       ...(input.pagesChannel ? { pagesChannel: input.pagesChannel } : {}),
-      ...(input.productsChannel ? { productsChannel: input.productsChannel } : {}),
+      ...(input.productsChannel
+        ? { productsChannel: input.productsChannel }
+        : {}),
       ...(input.publishingEnabled !== undefined
         ? { publishingEnabled: input.publishingEnabled }
         : {}),
@@ -196,7 +202,8 @@ async function loadPublishTarget(
   }
   if (!row.wordpressBaseUrl) {
     return {
-      error: "No site URL is saved for this project. Add it in Project settings → Publishing.",
+      error:
+        "No site URL is saved for this project. Add it in Project settings → Publishing.",
     };
   }
 
@@ -233,7 +240,9 @@ async function loadPublishTarget(
   }
 
   if (row.pagesChannel === "novamira") {
-    return { error: "Pages and posts route to NovaMira, which is not connected yet." };
+    return {
+      error: "Pages and posts route to NovaMira, which is not connected yet.",
+    };
   }
   if (!row.wpUsername || !row.wpAppPasswordSealed) {
     return {
@@ -375,10 +384,13 @@ export async function testConnections(
     // users/me reports who the credential authenticates AS and what it can do,
     // which is what actually matters: an over-privileged account is the risk
     // this credential was chosen to avoid.
-    const response = await fetch(`${base}/wp-json/wp/v2/users/me?context=edit`, {
-      headers: { Authorization: `Basic ${auth}` },
-      signal: AbortSignal.timeout(15_000),
-    });
+    const response = await fetch(
+      `${base}/wp-json/wp/v2/users/me?context=edit`,
+      {
+        headers: { Authorization: `Basic ${auth}` },
+        signal: AbortSignal.timeout(15_000),
+      },
+    );
 
     if (!response.ok) {
       results.push({
@@ -451,7 +463,8 @@ export async function inspectProductFields(
   if (!row?.wordpressBaseUrl || !row.wooConsumerKey || !consumerSecret) {
     return {
       ok: false,
-      reason: "WooCommerce is not connected for this project — save the store URL, key and secret first.",
+      reason:
+        "WooCommerce is not connected for this project — save the store URL, key and secret first.",
     };
   }
 
@@ -473,7 +486,10 @@ export async function inspectProductFields(
     },
   );
   if (!response.ok) {
-    return { ok: false, reason: `Store returned ${response.status} for the product.` };
+    return {
+      ok: false,
+      reason: `Store returned ${response.status} for the product.`,
+    };
   }
 
   const product = (await response.json().catch(() => ({}))) as {
@@ -483,7 +499,9 @@ export async function inspectProductFields(
     .filter((entry) => typeof entry.key === "string")
     .map((entry) => {
       const raw =
-        typeof entry.value === "string" ? entry.value : JSON.stringify(entry.value ?? "");
+        typeof entry.value === "string"
+          ? entry.value
+          : JSON.stringify(entry.value ?? "");
       return { key: entry.key as string, value: raw.slice(0, 160) };
     })
     .sort((a, b) => a.key.localeCompare(b.key));
@@ -524,6 +542,7 @@ function adapterOptions(recommendation: Recommendation) {
     // Only a brief carries the cannibalization check that makes a new URL safe.
     allowCreate: recommendation.type === "new_page_brief",
     focusKeyword: recommendation.primaryQuery,
+    updateContent: recommendation.type === "content_refresh",
     // Article images were copied into the app when the agent wrote them.
     loadImage: async (image: { assetId?: string }) =>
       image.assetId ? loadImage(recommendation.projectId, image.assetId) : null,
@@ -539,7 +558,8 @@ export async function previewPublish(
     recommendationId,
     projectId,
   );
-  if (!recommendation) throw new AppError("NOT_FOUND", "Recommendation not found.");
+  if (!recommendation)
+    throw new AppError("NOT_FOUND", "Recommendation not found.");
 
   const target = await loadPublishTarget(projectId, recommendation.targetUrl);
   if ("error" in target) return { ok: false, reason: target.error };
@@ -552,7 +572,12 @@ export async function previewPublish(
       adapterOptions(recommendation),
     );
     return result.ok
-      ? { ok: true, mode: result.mode, kind: result.kind, changes: result.changes }
+      ? {
+          ok: true,
+          mode: result.mode,
+          kind: result.kind,
+          changes: result.changes,
+        }
       : { ok: false, reason: result.reason };
   }
 
@@ -579,7 +604,9 @@ type AppliedPublish = {
 async function applyPublish(
   target: PublishTarget,
   recommendation: Recommendation,
-): Promise<{ ok: true; result: AppliedPublish } | { ok: false; reason: string }> {
+): Promise<
+  { ok: true; result: AppliedPublish } | { ok: false; reason: string }
+> {
   if (target.adapter === "wordpress") {
     const result = await wordpress.publish(
       target.credentials,
@@ -640,7 +667,8 @@ export async function publishApproved(input: {
     recommendationId,
     projectId,
   );
-  if (!recommendation) throw new AppError("NOT_FOUND", "Recommendation not found.");
+  if (!recommendation)
+    throw new AppError("NOT_FOUND", "Recommendation not found.");
 
   // The human gate, re-checked at the moment of writing rather than trusted
   // from whoever called this.
@@ -720,5 +748,10 @@ export async function publishApproved(input: {
     attemptKey: crypto.randomUUID(),
   });
 
-  return { ok: true, mode: result.mode, kind: result.kind, changes: result.applied };
+  return {
+    ok: true,
+    mode: result.mode,
+    kind: result.kind,
+    changes: result.applied,
+  };
 }
