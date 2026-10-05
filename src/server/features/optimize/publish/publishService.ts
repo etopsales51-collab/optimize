@@ -59,6 +59,40 @@ async function getRow(projectId: string) {
   return rows[0] ?? null;
 }
 
+export async function getWordpressPageConnection(projectId: string): Promise<
+  | {
+      ok: true;
+      credentials: wordpress.WordpressCredentials;
+      publishingEnabled: boolean;
+    }
+  | { ok: false; reason: string }
+> {
+  const row = await getRow(projectId);
+  if (!row?.wordpressBaseUrl || !row.wpUsername || !row.wpAppPasswordSealed) {
+    return {
+      ok: false,
+      reason: "Connect WordPress in Project settings → Publishing first.",
+    };
+  }
+  const appPassword = await openSecret(row.wpAppPasswordSealed);
+  if (!appPassword) {
+    return {
+      ok: false,
+      reason:
+        "The stored WordPress application password cannot be read. Re-enter it in Project settings → Publishing.",
+    };
+  }
+  return {
+    ok: true,
+    credentials: {
+      baseUrl: row.wordpressBaseUrl,
+      username: row.wpUsername,
+      appPassword,
+    },
+    publishingEnabled: row.publishingEnabled,
+  };
+}
+
 export async function getSettingsView(
   projectId: string,
 ): Promise<PublishSettingsView> {

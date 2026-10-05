@@ -106,6 +106,69 @@ select {
   @apply text-base;
 }
 
+.optimize-page-preview {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.7;
+}
+.optimize-page-preview h1 {
+  margin: 0 0 1rem;
+  font-size: clamp(1.8rem, 4vw, 2.75rem);
+  font-weight: 750;
+  line-height: 1.12;
+}
+.optimize-page-preview h2 {
+  margin: 2rem 0 0.75rem;
+  font-size: 1.55rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+.optimize-page-preview h3 {
+  margin: 1.25rem 0 0.4rem;
+  font-size: 1.15rem;
+  font-weight: 650;
+}
+.optimize-page-preview p,
+.optimize-page-preview ul,
+.optimize-page-preview ol {
+  margin: 0.65rem 0;
+}
+.optimize-page-preview ul,
+.optimize-page-preview ol {
+  padding-left: 1.5rem;
+}
+.optimize-page-preview img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  margin: 1rem auto;
+  object-fit: contain;
+}
+.optimize-page-preview .optimize-summary {
+  margin: 1.5rem 0;
+  border-left: 4px solid #2563eb;
+  border-radius: 0.5rem;
+  background: #eff6ff;
+  padding: 0.75rem 1rem;
+}
+.optimize-page-preview .optimize-cta {
+  margin-top: 2rem;
+  border-radius: 0.75rem;
+  background: #111827;
+  padding: 1.25rem;
+  color: white;
+}
+.optimize-page-preview table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.optimize-page-preview th,
+.optimize-page-preview td {
+  border: 1px solid #d1d5db;
+  padding: 0.65rem;
+  text-align: left;
+}
+
 /* Global input focus styling - use primary color instead of default ring */
 .input:focus,
 .input:focus-visible,

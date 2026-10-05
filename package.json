@@ -92,6 +92,7 @@
     "@tanstack/react-router-devtools": "^1.167.0",
     "@tanstack/react-start": "^1.168.26",
     "@tanstack/react-table": "^8.21.3",
+    "@wordpress/block-serialization-default-parser": "^5.56.0",
     "agents": "0.20.1",
     "ai": "^6.0.199",
     "autumn-js": "^1.2.33",

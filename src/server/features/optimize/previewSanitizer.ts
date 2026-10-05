@@ -91,7 +91,7 @@ const CLASS_TAGS = new Set([
   "ul",
 ]);
 
-const SAFE_CLASS = /^(?:etop-|nv-)[A-Za-z0-9_-]*$/;
+const SAFE_CLASS = /^(?:etop-|nv-|optimize-|wp-block-)[A-Za-z0-9_-]*$/;
 
 // Schemes permitted in href/src. `javascript:` and `data:` are the two that
 // turn a link or an image into script execution.
@@ -226,7 +226,7 @@ export function sanitizePreviewHtml(
             for (const required of ["noopener", "noreferrer"]) {
               if (!rel.includes(required)) rel.push(required);
             }
-          } else if (sourceTarget) {
+          } else if (kind === "other" && sourceTarget) {
             parts.push(`target="${sourceTarget}"`);
           }
 

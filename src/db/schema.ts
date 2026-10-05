@@ -112,6 +112,7 @@ export const {
   optimizeComments,
   optimizeJobEvents,
   projectPublishSettings,
+  wordpressPageDrafts,
   whatsappRecipients,
   whatsappMessages,
   researchRuns,

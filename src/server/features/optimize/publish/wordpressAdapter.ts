@@ -145,6 +145,194 @@ function wpFetch(
   });
 }
 
+export type GutenbergSource = {
+  id: number;
+  title: string;
+  status: string;
+  link: string;
+  modifiedGmt: string | null;
+  contentRaw: string;
+  contentRendered: string;
+};
+
+export type MediaLibraryItem = {
+  id: number;
+  sourceUrl: string;
+  alt: string;
+  caption: string;
+  title: string;
+};
+
+export async function readGutenbergSource(
+  credentials: WordpressCredentials,
+  kind: "blocks" | "pages",
+  id: number,
+): Promise<
+  { ok: true; item: GutenbergSource } | { ok: false; reason: string }
+> {
+  const response = await wpFetch(
+    credentials,
+    `/wp/v2/${kind}/${id}?context=edit&_fields=id,title,status,link,modified_gmt,content`,
+  );
+  if (!response.ok)
+    return { ok: false, reason: await describeFailure(response) };
+  const row = (await response.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
+  const title = row.title as { raw?: string; rendered?: string } | undefined;
+  const content = row.content as
+    | { raw?: string; rendered?: string }
+    | undefined;
+  return {
+    ok: true,
+    item: {
+      id: Number(row.id),
+      title: title?.raw ?? title?.rendered ?? "",
+      status: String(row.status ?? ""),
+      link: String(row.link ?? ""),
+      modifiedGmt:
+        typeof row.modified_gmt === "string" ? row.modified_gmt : null,
+      contentRaw: content?.raw ?? "",
+      contentRendered: content?.rendered ?? "",
+    },
+  };
+}
+
+export async function listMedia(
+  credentials: WordpressCredentials,
+  search = "",
+): Promise<
+  { ok: true; items: MediaLibraryItem[] } | { ok: false; reason: string }
+> {
+  const query = new URLSearchParams({
+    media_type: "image",
+    per_page: "40",
+    orderby: "date",
+    order: "desc",
+  });
+  if (search.trim()) query.set("search", search.trim());
+  const response = await wpFetch(
+    credentials,
+    `/wp/v2/media?${query.toString()}&_fields=id,source_url,alt_text,caption,title`,
+  );
+  if (!response.ok)
+    return { ok: false, reason: await describeFailure(response) };
+  const rows = (await response.json().catch(() => [])) as Array<
+    Record<string, unknown>
+  >;
+  return {
+    ok: true,
+    items: rows
+      .map((row) => ({
+        id: Number(row.id),
+        sourceUrl: String(row.source_url ?? ""),
+        alt: String(row.alt_text ?? ""),
+        caption: String(
+          (row.caption as { raw?: string } | undefined)?.raw ?? "",
+        ),
+        title: String((row.title as { raw?: string } | undefined)?.raw ?? ""),
+      }))
+      .filter((item) => item.id > 0 && item.sourceUrl),
+  };
+}
+
+export async function getMedia(
+  credentials: WordpressCredentials,
+  id: number,
+): Promise<
+  { ok: true; item: MediaLibraryItem } | { ok: false; reason: string }
+> {
+  const response = await wpFetch(
+    credentials,
+    `/wp/v2/media/${id}?context=edit&_fields=id,source_url,alt_text,caption,title`,
+  );
+  if (!response.ok)
+    return { ok: false, reason: await describeFailure(response) };
+  const row = (await response.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
+  return {
+    ok: true,
+    item: {
+      id: Number(row.id),
+      sourceUrl: String(row.source_url ?? ""),
+      alt: String(row.alt_text ?? ""),
+      caption: String((row.caption as { raw?: string } | undefined)?.raw ?? ""),
+      title: String((row.title as { raw?: string } | undefined)?.raw ?? ""),
+    },
+  };
+}
+
+export async function findPageBySlug(
+  credentials: WordpressCredentials,
+  slug: string,
+): Promise<
+  { ok: true; item: GutenbergSource | null } | { ok: false; reason: string }
+> {
+  const response = await wpFetch(
+    credentials,
+    `/wp/v2/pages?slug=${encodeURIComponent(slug)}&status=${ANY_STATUS}&context=edit&per_page=10&_fields=id,title,status,link,modified_gmt,content`,
+  );
+  if (!response.ok)
+    return { ok: false, reason: await describeFailure(response) };
+  const rows = (await response.json().catch(() => [])) as Array<
+    Record<string, unknown>
+  >;
+  if (!rows[0]) return { ok: true, item: null };
+  return readGutenbergSource(credentials, "pages", Number(rows[0].id));
+}
+
+export async function writeGutenbergPage(
+  credentials: WordpressCredentials,
+  input: {
+    id?: number | null;
+    title: string;
+    slug: string;
+    content: string;
+    status: "draft" | "publish";
+  },
+): Promise<
+  | { ok: true; item: GutenbergSource; previewUrl: string }
+  | { ok: false; reason: string }
+> {
+  const response = await wpFetch(
+    credentials,
+    `/wp/v2/pages${input.id ? `/${input.id}` : ""}`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        title: input.title,
+        slug: input.slug,
+        content: input.content,
+        status: input.status,
+        template: "elementor_header_footer",
+      }),
+    },
+  );
+  if (!response.ok)
+    return { ok: false, reason: await describeFailure(response) };
+  const row = (await response.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
+  const id = Number(row.id);
+  if (!id)
+    return {
+      ok: false,
+      reason: "WordPress saved the page but did not return its ID.",
+    };
+  const reread = await readGutenbergSource(credentials, "pages", id);
+  if (!reread.ok) return reread;
+  const base = credentials.baseUrl.replace(/\/+$/, "");
+  const previewUrl =
+    input.status === "draft"
+      ? `${base}/?page_id=${id}&preview=true`
+      : reread.item.link;
+  return { ok: true, item: reread.item, previewUrl };
+}
+
 /** Readable reason, with the credential never echoed back. */
 async function describeFailure(response: Response): Promise<string> {
   if (response.status === 401 || response.status === 403) {
@@ -594,6 +782,35 @@ async function writeSeoMeta(
     return " The SEO fields were not written: Rank Math is not active on this site.";
   }
   return ` The SEO fields were not written: ${await describeFailure(response)}`;
+}
+
+export async function writePageSeoMeta(
+  credentials: WordpressCredentials,
+  id: number,
+  input: { title: string; description: string; focusKeyword: string },
+): Promise<{ ok: boolean; warning: string | null }> {
+  const changes = [
+    {
+      field: "rank_math_title" as const,
+      label: "SEO title",
+      before: "",
+      after: input.title,
+    },
+    {
+      field: "rank_math_description" as const,
+      label: "Meta description",
+      before: "",
+      after: input.description,
+    },
+    {
+      field: "rank_math_focus_keyword" as const,
+      label: "Focus keyword",
+      before: "",
+      after: input.focusKeyword,
+    },
+  ].filter((change) => change.after.trim());
+  const note = await writeSeoMeta(credentials, id, changes);
+  return { ok: !note, warning: note.trim() || null };
 }
 
 /**
