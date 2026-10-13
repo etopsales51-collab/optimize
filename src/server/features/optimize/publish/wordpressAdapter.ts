@@ -1,6 +1,8 @@
 import { buildArticleBodyHtml } from "@/shared/articleHtml";
 import type { ArticleImage, OptimizeProposal } from "@/shared/optimize";
 import { z } from "zod";
+import { applyInternalLinks, applySectionEdits } from "./contentTransforms";
+import { resolveWpObject } from "./resolveWpObject";
 
 /**
  * WordPress REST adapter for pages and blog posts: every URL that is not a
@@ -46,7 +48,7 @@ export type WordpressCredentials = {
   appPassword: string;
 };
 
-export type ContentKind = "post" | "page";
+export type ContentKind = "post" | "page" | "term" | "custom_post";
 
 export type WpPlannedChange = {
   field:
@@ -56,6 +58,7 @@ export type WpPlannedChange = {
     | "title"
     | "content"
     | "images"
+    | "internal_links"
     | "status"
     | "categories";
   label: string;
@@ -71,6 +74,10 @@ export type ResolvedContent = {
   status: string;
   modifiedGmt: string | null;
   contentRaw: string;
+  restBase: string;
+  subtype: string;
+  parentId?: number;
+  isFrontPage?: boolean;
 };
 
 export type WpPlan =
@@ -379,60 +386,35 @@ export async function resolveContent(
   credentials: WordpressCredentials,
   targetUrl: string,
 ): Promise<
-  { ok: true; target: ResolvedContent | null } | { ok: false; reason: string }
+  | { ok: true; target: ResolvedContent | null; tried?: string[] }
+  | { ok: false; reason: string }
 > {
-  const segments = pathSegments(targetUrl);
-  if (segments === null)
-    return { ok: false, reason: `Not a valid URL: ${targetUrl}` };
-  const slug = segments[segments.length - 1];
-  if (!slug) {
-    return {
-      ok: false,
-      reason: "That URL is the home page, which is not published from here.",
-    };
-  }
-
-  for (const kind of ["post", "page"] as const) {
-    const response = await wpFetch(
-      credentials,
-      `/wp/v2/${kind}s?slug=${encodeURIComponent(slug)}&status=${ANY_STATUS}&context=edit&per_page=10&_fields=id,link,status,title,modified_gmt,content`,
-    );
-    if (!response.ok)
-      return { ok: false, reason: await describeFailure(response) };
-
-    const rows = (await response.json().catch(() => [])) as Array<{
-      id?: number;
-      link?: string;
-      status?: string;
-      title?: { raw?: string; rendered?: string };
-      modified_gmt?: string;
-      content?: { raw?: string; rendered?: string };
-    }>;
-    if (!Array.isArray(rows) || rows.length === 0) continue;
-
-    // Two pages under different parents can share a slug; prefer the one
-    // whose live path is the target. Drafts have no pretty link yet.
-    const row =
-      rows.find((entry) => entry.link && samePath(entry.link, targetUrl)) ??
-      rows.find((entry) => entry.status !== "publish") ??
-      (rows.length === 1 ? rows[0] : undefined);
-    if (!row?.id) continue;
-
-    return {
-      ok: true,
-      target: {
-        id: row.id,
-        kind,
-        title: row.title?.raw ?? decodeEntities(row.title?.rendered ?? ""),
-        link: row.link ?? targetUrl,
-        status: row.status ?? "publish",
-        modifiedGmt: row.modified_gmt ?? null,
-        contentRaw: row.content?.raw ?? row.content?.rendered ?? "",
-      },
-    };
-  }
-
-  return { ok: true, target: null };
+  const resolved = await resolveWpObject(credentials, targetUrl);
+  if (!resolved.ok) return resolved;
+  if (!resolved.target)
+    return { ok: true, target: null, tried: resolved.tried };
+  const item = resolved.target;
+  return {
+    ok: true,
+    target: {
+      id: item.id,
+      kind:
+        item.objectType === "term"
+          ? "term"
+          : item.subtype === "post" || item.subtype === "page"
+            ? item.subtype
+            : "custom_post",
+      title: item.title,
+      link: item.link,
+      status: item.status ?? "publish",
+      modifiedGmt: item.modifiedGmt,
+      contentRaw: item.contentRaw,
+      restBase: item.restBase,
+      subtype: item.subtype,
+      parentId: item.parentId,
+      isFrontPage: item.isFrontPage,
+    },
+  };
 }
 
 /**
@@ -616,13 +598,32 @@ export async function plan(
         ? await readLiveHead(target.link)
         : { title: "", description: "" };
     const changes = seoChanges(proposal, focusKeyword, current);
-    const body = buildArticleBodyHtml(proposal, {
-      imageSource: () => null,
-      placeholders: false,
-    });
+    let body = target.contentRaw;
+    if (options.updateContent) {
+      body = applySectionEdits(body, proposal.sections, target.isFrontPage);
+    }
+    const linked = applyInternalLinks(
+      body,
+      proposal.internalLinks,
+      credentials.baseUrl,
+      true,
+    );
+    body = linked.html;
+    if (linked.results.length) {
+      changes.push({
+        field: "internal_links",
+        label: "Internal links",
+        before: "",
+        after: linked.results
+          .map(
+            (result) =>
+              `${result.anchor}: ${result.action}${result.reason ? ` (${result.reason})` : ""}`,
+          )
+          .join("; "),
+      });
+    }
     if (
-      options.updateContent &&
-      body &&
+      (options.updateContent || proposal.internalLinks.length > 0) &&
       target.contentRaw.trim() !== body.trim()
     ) {
       changes.push({
@@ -653,9 +654,12 @@ export async function plan(
 
   // ---- Create ------------------------------------------------------------
   if (!options.allowCreate) {
+    const checked = resolved.tried?.length
+      ? resolved.tried.join(", ")
+      : "posts, pages, product, product_cat, category, post_tag, product_tag";
     return {
       ok: false,
-      reason: `Nothing exists at "${slug}" to update. If this URL should be created, ask the agent to send it as a new page brief.`,
+      reason: `Nothing exists at ${targetUrl} to update. Checked: ${checked}. If this URL should be created, send it as a new page brief.`,
     };
   }
 
@@ -765,6 +769,7 @@ async function writeSeoMeta(
   credentials: WordpressCredentials,
   id: number,
   changes: WpPlannedChange[],
+  objectType: "post" | "term" = "post",
 ): Promise<string> {
   const meta = Object.fromEntries(
     changes
@@ -775,7 +780,7 @@ async function writeSeoMeta(
 
   const response = await wpFetch(credentials, "/rankmath/v1/updateMeta", {
     method: "POST",
-    body: JSON.stringify({ objectType: "post", objectID: id, meta }),
+    body: JSON.stringify({ objectType, objectID: id, meta }),
   });
   if (response.ok) return "";
   if (response.status === 404) {
@@ -878,7 +883,7 @@ async function uploadImages(
 
 async function verifyBodyWrite(
   credentials: WordpressCredentials,
-  kind: ContentKind,
+  restBase: string,
   id: number,
   expectedBody: string,
   previousModifiedGmt: string | null,
@@ -887,7 +892,7 @@ async function verifyBodyWrite(
 > {
   const response = await wpFetch(
     credentials,
-    `/wp/v2/${kind}s/${id}?context=edit&_fields=id,modified_gmt,content`,
+    `/wp/v2/${restBase}/${id}?context=edit&_fields=id,modified_gmt,content`,
   );
   if (!response.ok) {
     return {
@@ -937,7 +942,10 @@ export async function publish(
 ): Promise<WpApplyResult> {
   const planned = await plan(credentials, targetUrl, proposal, options);
   if (!planned.ok) return planned;
-  const collection = `/wp/v2/${planned.kind}s`;
+  const collection =
+    planned.mode === "update" && planned.target
+      ? `/wp/v2/${planned.target.restBase}`
+      : `/wp/v2/${planned.kind}s`;
 
   if (planned.mode === "update" && planned.target) {
     const target = planned.target;
@@ -945,10 +953,35 @@ export async function publish(
       (change) => change.field === "content",
     );
     const updateBody: Record<string, unknown> = {};
-    if (planned.changes.some((change) => change.field === "status")) {
+    if (
+      target.kind !== "term" &&
+      planned.changes.some((change) => change.field === "status")
+    ) {
       updateBody.status = "publish";
     }
-    if (bodyChange) updateBody.content = bodyChange.after;
+    if (bodyChange) {
+      if (target.kind === "term") updateBody.description = bodyChange.after;
+      else updateBody.content = bodyChange.after;
+    }
+    const nextName = proposal.h1?.after?.trim();
+    if (target.kind === "term" && nextName && nextName !== target.title)
+      updateBody.name = nextName;
+
+    if (target.isFrontPage && bodyChange) {
+      const beforeBlocks = (target.contentRaw.match(/<!--\s*\/?wp:/g) ?? [])
+        .length;
+      const afterBlocks = (bodyChange.after.match(/<!--\s*\/?wp:/g) ?? [])
+        .length;
+      const beforeH1 = (target.contentRaw.match(/<h1\b/gi) ?? []).length;
+      const afterH1 = (bodyChange.after.match(/<h1\b/gi) ?? []).length;
+      if (beforeBlocks !== afterBlocks || beforeH1 !== afterH1) {
+        return {
+          ok: false,
+          reason:
+            "The front-page edit would change its block structure or H1 count, so publishing was aborted.",
+        };
+      }
+    }
 
     if (Object.keys(updateBody).length > 0) {
       const response = await wpFetch(
@@ -959,34 +992,73 @@ export async function publish(
           body: JSON.stringify(updateBody),
         },
       );
-      if (!response.ok)
+      if (!response.ok) {
+        if (
+          target.kind === "term" &&
+          (response.status === 401 || response.status === 403)
+        ) {
+          return {
+            ok: false,
+            reason:
+              "WordPress refused the taxonomy update. The publishing user needs Shop Manager or Administrator rights (manage_product_terms for product categories).",
+          };
+        }
         return { ok: false, reason: await describeFailure(response) };
+      }
     }
 
     let verifiedModifiedGmt = target.modifiedGmt;
     if (bodyChange) {
-      const verified = await verifyBodyWrite(
-        credentials,
-        target.kind,
-        target.id,
-        bodyChange.after,
-        target.modifiedGmt,
-      );
-      if (!verified.ok) return verified;
-      verifiedModifiedGmt = verified.modifiedGmt;
+      if (target.kind !== "term") {
+        const verified = await verifyBodyWrite(
+          credentials,
+          target.restBase,
+          target.id,
+          bodyChange.after,
+          target.modifiedGmt,
+        );
+        if (!verified.ok) return verified;
+        verifiedModifiedGmt = verified.modifiedGmt;
+      }
     }
-    const seoNote = await writeSeoMeta(credentials, target.id, planned.changes);
+    const seoNote = await writeSeoMeta(
+      credentials,
+      target.id,
+      planned.changes,
+      target.kind === "term" ? "term" : "post",
+    );
+    let renderNote = "";
+    if (target.kind === "term" && bodyChange) {
+      try {
+        const live = await fetch(target.link, {
+          headers: { Accept: "text/html" },
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        });
+        const expectedText = bodyChange.after
+          .replace(/<[^>]+>/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 120);
+        const visible = live.ok ? await live.text() : "";
+        if (expectedText && !visible.includes(expectedText)) {
+          renderNote =
+            " Saved to the category description, but this theme's product archive template does not display it. Add a Term Description block to the Product Catalog template.";
+        }
+      } catch {
+        // The REST write succeeded; a failed public render check is advisory.
+      }
+    }
     return {
       ok: true,
       mode: "update",
       target: {
         ...target,
-        status: "publish",
+        status: target.kind === "term" ? target.status : "publish",
         modifiedGmt: verifiedModifiedGmt,
         contentRaw: bodyChange?.after ?? target.contentRaw,
       },
       applied: planned.changes,
-      revisionHint: `${target.kind} ${target.id} (${target.title}). Previous SEO values are recorded in this recommendation's job events.${seoNote}`,
+      revisionHint: `${target.kind} ${target.id} (${target.title}). Previous content and SEO values are recorded in this recommendation's job events.${seoNote}${renderNote}`,
     };
   }
 
@@ -1028,7 +1100,7 @@ export async function publish(
   const verified = expectedBody
     ? await verifyBodyWrite(
         credentials,
-        planned.kind,
+        `${planned.kind}s`,
         created.id,
         expectedBody,
         null,
@@ -1045,6 +1117,8 @@ export async function publish(
     status: "publish",
     modifiedGmt: verified.modifiedGmt,
     contentRaw: expectedBody,
+    restBase: `${planned.kind}s`,
+    subtype: planned.kind,
   };
   // WordPress changes a taken slug (adds -2); say so rather than let the
   // recommendation point at a URL that does not exist.
