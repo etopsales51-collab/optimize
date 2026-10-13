@@ -8,6 +8,7 @@ import { loadImage } from "../optimizeImages";
 import { OptimizeRepository } from "../repositories/OptimizeRepository";
 import * as woocommerce from "./woocommerceAdapter";
 import * as wordpress from "./wordpressAdapter";
+import { resolveWpObject } from "./resolveWpObject";
 import { alertPublishResult } from "@/server/features/whatsapp/whatsappAlerts";
 
 /**
@@ -57,6 +58,40 @@ async function getRow(projectId: string) {
     .where(eq(projectPublishSettings.projectId, projectId))
     .limit(1);
   return rows[0] ?? null;
+}
+
+export async function getWordpressPageConnection(projectId: string): Promise<
+  | {
+      ok: true;
+      credentials: wordpress.WordpressCredentials;
+      publishingEnabled: boolean;
+    }
+  | { ok: false; reason: string }
+> {
+  const row = await getRow(projectId);
+  if (!row?.wordpressBaseUrl || !row.wpUsername || !row.wpAppPasswordSealed) {
+    return {
+      ok: false,
+      reason: "Connect WordPress in Project settings → Publishing first.",
+    };
+  }
+  const appPassword = await openSecret(row.wpAppPasswordSealed);
+  if (!appPassword) {
+    return {
+      ok: false,
+      reason:
+        "The stored WordPress application password cannot be read. Re-enter it in Project settings → Publishing.",
+    };
+  }
+  return {
+    ok: true,
+    credentials: {
+      baseUrl: row.wordpressBaseUrl,
+      username: row.wpUsername,
+      appPassword,
+    },
+    publishingEnabled: row.publishingEnabled,
+  };
 }
 
 export async function getSettingsView(
@@ -207,7 +242,31 @@ async function loadPublishTarget(
     };
   }
 
-  if (isProductUrl(targetUrl)) {
+  let wpCredentials: wordpress.WordpressCredentials | null = null;
+  if (row.wpUsername && row.wpAppPasswordSealed) {
+    const password = await openSecret(row.wpAppPasswordSealed);
+    if (password) {
+      wpCredentials = {
+        baseUrl: row.wordpressBaseUrl,
+        username: row.wpUsername,
+        appPassword: password,
+      };
+    }
+  }
+  const resolved = wpCredentials
+    ? await resolveWpObject(wpCredentials, targetUrl)
+    : null;
+  const isResolvedProduct = Boolean(
+    resolved?.ok &&
+    resolved.target?.objectType === "post" &&
+    resolved.target.subtype === "product",
+  );
+
+  if (
+    isResolvedProduct ||
+    ((!resolved || (resolved.ok && !resolved.target)) &&
+      isProductUrl(targetUrl))
+  ) {
     if (row.productsChannel !== "wp_rest") {
       return {
         error:
@@ -244,26 +303,15 @@ async function loadPublishTarget(
       error: "Pages and posts route to NovaMira, which is not connected yet.",
     };
   }
-  if (!row.wpUsername || !row.wpAppPasswordSealed) {
+  if (!wpCredentials) {
     return {
       error:
         "This URL is a page or blog post, not a product, so it publishes through WordPress. Add a WordPress username and application password (an Editor account) in Project settings → Publishing.",
     };
   }
-  const appPassword = await openSecret(row.wpAppPasswordSealed);
-  if (!appPassword) {
-    return {
-      error:
-        "The stored WordPress application password could not be read — it was encrypted under a different BETTER_AUTH_SECRET. Re-enter it in Project settings → Publishing.",
-    };
-  }
   return {
     adapter: "wordpress",
-    credentials: {
-      baseUrl: row.wordpressBaseUrl,
-      username: row.wpUsername,
-      appPassword,
-    },
+    credentials: wpCredentials,
   };
 }
 
@@ -529,7 +577,7 @@ export type PublishOutcome = {
   /** Whether this touches an existing item or brings a new one into being. */
   mode?: "create" | "update";
   /** What is being published, for the UI's wording. */
-  kind?: "product" | "post" | "page";
+  kind?: "product" | "post" | "page" | "term" | "custom_post";
   changes?: PublishChange[];
 };
 
@@ -594,7 +642,7 @@ export async function previewPublish(
 
 type AppliedPublish = {
   mode: "create" | "update";
-  kind: "product" | "post" | "page";
+  kind: "product" | "post" | "page" | "term" | "custom_post";
   externalId: string;
   name: string;
   applied: PublishChange[];
@@ -620,7 +668,10 @@ async function applyPublish(
       result: {
         mode: result.mode,
         kind: result.target.kind,
-        externalId: `${result.target.kind}/${result.target.id}`,
+        externalId:
+          result.target.kind === "term"
+            ? `term/${result.target.subtype}/${result.target.id}`
+            : `${result.target.kind}/${result.target.id}`,
         name: result.target.title,
         applied: result.applied,
         revisionHint: result.revisionHint,

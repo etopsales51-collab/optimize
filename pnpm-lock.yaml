@@ -75,6 +75,9 @@ importers:
       '@tanstack/react-table':
         specifier: ^8.21.3
         version: 8.21.3(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@wordpress/block-serialization-default-parser':
+        specifier: ^5.56.0
+        version: 5.56.0
       agents:
         specifier: 0.20.1
         version: 0.20.1(@ai-sdk/react@3.0.211(react@19.2.4)(zod@4.3.6))(@babel/core@7.29.7)(@babel/runtime@7.29.2)(@cloudflare/codemode@0.5.1(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(zod@4.3.6))(ai@6.0.199(zod@4.3.6))(zod@4.3.6))(@cloudflare/workers-types@4.20260702.1)(@modelcontextprotocol/client@2.0.0)(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(zod@4.3.6))(@modelcontextprotocol/server@2.0.0)(ai@6.0.199(zod@4.3.6))(chat@4.32.0(ai@6.0.199(zod@4.3.6))(zod@4.3.6))(just-bash@3.0.2)(react@19.2.4)(rolldown@1.0.1)(vite@7.3.6(@types/node@22.19.11)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)(yaml@2.9.0))(zod@4.3.6)
@@ -3035,6 +3038,10 @@ packages:
 
   '@vitest/utils@3.2.6':
     resolution: {integrity: sha512-lI23nIs4bnT3T8NIoh+vFaz5s2/DdP0Jgt2jxwgWljvwn82cLJtyi/If+fjFyoLMGIOz0U/fKvWE0d4jsNQEfg==}
+
+  '@wordpress/block-serialization-default-parser@5.56.0':
+    resolution: {integrity: sha512-ZS2DpbXSFke+Hqld0l2oB8SxNj49AC6MidE0CKA0MYk5Xd/eBeDUNt/JqjpVJlWcdiO+7kVCe8VP7YPOkON64A==}
+    engines: {node: '>=18.12.0'}
 
   '@workflow/serde@4.1.0':
     resolution: {integrity: sha512-pav4F2BoirECWR7Nf1TKt+2eETcBj7jj4cBefQ8VXQCA6NPkaKeLfj/zMgi+3zYV5ZIBT4GuUiphsj0/b9hPQQ==}
@@ -8649,6 +8656,8 @@ snapshots:
       '@vitest/pretty-format': 3.2.6
       loupe: 3.2.1
       tinyrainbow: 2.0.0
+
+  '@wordpress/block-serialization-default-parser@5.56.0': {}
 
   '@workflow/serde@4.1.0': {}
 

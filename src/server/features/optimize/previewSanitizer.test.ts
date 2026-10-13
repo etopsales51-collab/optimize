@@ -66,7 +66,7 @@ describe("sanitizePreviewHtml", () => {
       { siteUrl: "https://www.etopme.ae" },
     );
     expect(out).toBe(
-      `<a href="https://etopme.ae/x/" target="_self" rel="sponsored">go</a>`,
+      `<a href="https://etopme.ae/x/" rel="sponsored">go</a>`,
     );
   });
 

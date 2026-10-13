@@ -1,4 +1,9 @@
-import { sqliteTable, text, integer, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  sqliteTable,
+  text,
+  integer,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 import { projects } from "./app.schema";
 
@@ -73,5 +78,41 @@ export const projectPublishSettings = sqliteTable(
   },
   (table) => [
     uniqueIndex("project_publish_settings_project_id_uidx").on(table.projectId),
+  ],
+);
+
+export const wordpressPageDrafts = sqliteTable(
+  "wordpress_page_drafts",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    wpPageId: integer("wp_page_id"),
+    schemaVersion: text("schema_version").notNull().default("optimize-page-v1"),
+    title: text("title").notNull(),
+    slug: text("slug").notNull(),
+    documentJson: text("document_json").notNull(),
+    remoteModifiedGmt: text("remote_modified_gmt"),
+    previewUrl: text("preview_url"),
+    status: text("status", { enum: ["draft", "publish"] })
+      .notNull()
+      .default("draft"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(current_timestamp)`),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`(current_timestamp)`),
+  },
+  (table) => [
+    uniqueIndex("wordpress_page_drafts_project_slug_uidx").on(
+      table.projectId,
+      table.slug,
+    ),
+    uniqueIndex("wordpress_page_drafts_project_wp_page_uidx").on(
+      table.projectId,
+      table.wpPageId,
+    ),
   ],
 );

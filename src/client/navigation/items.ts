@@ -8,6 +8,7 @@ import {
   Link2,
   MessageCircle,
   MessageSquare,
+  FilePenLine,
   Search,
   Sparkles,
   TrendingUp,
@@ -75,6 +76,11 @@ const projectNavItems = [
     icon: Wand2,
   },
   {
+    to: "/p/$projectId/pages" as const,
+    label: "Page Editor",
+    icon: FilePenLine,
+  },
+  {
     to: "/p/$projectId/whatsapp" as const,
     label: "WhatsApp",
     icon: MessageCircle,
@@ -130,6 +136,7 @@ export function getProjectNavGroups(projectId: string) {
       label: "Content",
       items: [
         byPath("/p/$projectId/optimize"),
+        byPath("/p/$projectId/pages"),
         byPath("/p/$projectId/whatsapp"),
       ],
     },
