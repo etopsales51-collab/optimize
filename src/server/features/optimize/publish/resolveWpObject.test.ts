@@ -56,6 +56,47 @@ describe("resolveWpObject", () => {
     });
   });
 
+  it("uses the public term record when edit context is forbidden", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === "https://example.com/product-category/parent/child/") {
+          return new Response("", {
+            headers: {
+              Link: '<https://example.com/wp-json/wp/v2/product_cat/25>; rel="alternate"; type="application/json"',
+            },
+          });
+        }
+        if (url.endsWith("/wp-json/wp/v2/taxonomies")) return json({});
+        if (url.endsWith("/wp-json/wp/v2/product_cat/25?context=edit")) {
+          return json({ code: "rest_forbidden_context" }, 403);
+        }
+        if (url.endsWith("/wp-json/wp/v2/product_cat/25")) {
+          return json({
+            id: 25,
+            name: "Child",
+            slug: "child",
+            parent: 24,
+            link: "https://example.com/product-category/parent/child/",
+            description: "Old",
+          });
+        }
+        return json({}, 404);
+      }),
+    );
+
+    const result = await resolveWpObject(
+      credentials,
+      "https://example.com/product-category/parent/child/",
+    );
+    expect(result.ok && result.target).toMatchObject({
+      objectType: "term",
+      id: 25,
+      contentRaw: "Old",
+    });
+  });
+
   it("resolves the configured static front page", async () => {
     vi.stubGlobal(
       "fetch",

@@ -101,10 +101,17 @@ async function getOne(
   subtype: string,
   targetUrl: string,
 ): Promise<ResolvedWpObject | null> {
-  const response = await api(
+  let response = await api(
     credentials,
     `/wp/v2/${restBase}/${id}?context=edit`,
   );
+  // Taxonomy records are commonly public while context=edit requires
+  // manage_terms/manage_product_terms. The live URL already identified the
+  // exact object, so use its public representation for preview/resolution and
+  // let the write return the actionable capability error if access is lacking.
+  if (response.status === 401 || response.status === 403) {
+    response = await api(credentials, `/wp/v2/${restBase}/${id}`);
+  }
   if (!response.ok) return null;
   const row = (await response.json().catch(() => null)) as Record<
     string,
