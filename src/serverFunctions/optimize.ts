@@ -17,6 +17,10 @@ import {
   testConnections,
 } from "@/server/features/optimize/publish/publishService";
 import { requireOrgPermission } from "@/server/auth/org-gate";
+import {
+  HTTPS_PUBLISHING_URL_MESSAGE,
+  isHttpsPublishingUrl,
+} from "@/shared/publishingUrl";
 
 /**
  * Staff-facing Optimize surface. Everything here runs as the signed-in user
@@ -171,7 +175,15 @@ export const savePublishSettings = createServerFn({ method: "POST" })
   .middleware(requireProjectContext)
   .validator(
     projectScopedSchema.extend({
-      wordpressBaseUrl: z.string().url().or(z.literal("")).optional(),
+      wordpressBaseUrl: z
+        .string()
+        .url()
+        .or(z.literal(""))
+        .refine(
+          (value) => value === "" || isHttpsPublishingUrl(value),
+          HTTPS_PUBLISHING_URL_MESSAGE,
+        )
+        .optional(),
       wpUsername: z.string().max(200).optional(),
       wpAppPassword: z.string().max(500).optional(),
       // WooCommerce always issues these with ck_/cs_ prefixes. Checking that
@@ -203,7 +215,8 @@ export const savePublishSettings = createServerFn({ method: "POST" })
     requireOrgPermission(context, { member: ["update"] });
     await saveSettings({
       projectId: context.projectId,
-      wordpressBaseUrl: data.wordpressBaseUrl === "" ? null : data.wordpressBaseUrl,
+      wordpressBaseUrl:
+        data.wordpressBaseUrl === "" ? null : data.wordpressBaseUrl,
       wpUsername: data.wpUsername,
       wpAppPassword: data.wpAppPassword,
       wooConsumerKey: data.wooConsumerKey,

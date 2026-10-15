@@ -4,6 +4,10 @@ import { projectPublishSettings } from "@/db/schema";
 import { AppError } from "@/server/lib/errors";
 import { openSecret, sealSecret } from "@/server/lib/secret-box";
 import { isExecutable, isProductUrl } from "@/shared/optimize";
+import {
+  HTTPS_PUBLISHING_URL_MESSAGE,
+  isHttpsPublishingUrl,
+} from "@/shared/publishingUrl";
 import { loadImage } from "../optimizeImages";
 import { OptimizeRepository } from "../repositories/OptimizeRepository";
 import * as woocommerce from "./woocommerceAdapter";
@@ -241,6 +245,9 @@ async function loadPublishTarget(
         "No site URL is saved for this project. Add it in Project settings → Publishing.",
     };
   }
+  if (!isHttpsPublishingUrl(row.wordpressBaseUrl)) {
+    return { error: HTTPS_PUBLISHING_URL_MESSAGE };
+  }
 
   let wpCredentials: wordpress.WordpressCredentials | null = null;
   if (row.wpUsername && row.wpAppPasswordSealed) {
@@ -344,6 +351,13 @@ export async function testConnections(
         detail: "No site URL saved yet.",
       },
     ];
+  }
+  if (!isHttpsPublishingUrl(row.wordpressBaseUrl)) {
+    return (["woocommerce", "wordpress"] as const).map((channel) => ({
+      channel,
+      ok: false,
+      detail: HTTPS_PUBLISHING_URL_MESSAGE,
+    }));
   }
   const base = row.wordpressBaseUrl.replace(/\/+$/, "");
 
@@ -514,6 +528,9 @@ export async function inspectProductFields(
       reason:
         "WooCommerce is not connected for this project — save the store URL, key and secret first.",
     };
+  }
+  if (!isHttpsPublishingUrl(row.wordpressBaseUrl)) {
+    return { ok: false, reason: HTTPS_PUBLISHING_URL_MESSAGE };
   }
 
   const credentials = {

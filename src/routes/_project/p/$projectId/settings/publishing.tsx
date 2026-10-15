@@ -5,13 +5,19 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getStandardErrorMessage } from "@/client/lib/error-messages";
 import {
+  HTTPS_PUBLISHING_URL_MESSAGE,
+  isHttpsPublishingUrl,
+} from "@/shared/publishingUrl";
+import {
   getPublishSettings,
   inspectPublishProduct,
   savePublishSettings,
   testPublishConnections,
 } from "@/serverFunctions/optimize";
 
-export const Route = createFileRoute("/_project/p/$projectId/settings/publishing")({
+export const Route = createFileRoute(
+  "/_project/p/$projectId/settings/publishing",
+)({
   component: PublishingSettingsPage,
 });
 
@@ -95,14 +101,18 @@ function PublishingSettingsPage() {
       toast.success("Publishing settings saved");
     },
     onError: (error) =>
-      toast.error(getStandardErrorMessage(error, "Could not save these settings.")),
+      toast.error(
+        getStandardErrorMessage(error, "Could not save these settings."),
+      ),
   });
 
   // Verifies what is stored, without the secret ever leaving the server.
   const testMutation = useMutation({
     mutationFn: () => testPublishConnections({ data: { projectId } }),
     onError: (error) =>
-      toast.error(getStandardErrorMessage(error, "Could not test the connection.")),
+      toast.error(
+        getStandardErrorMessage(error, "Could not test the connection."),
+      ),
   });
 
   // Read-only: shows what one product stores, so the field a template reads
@@ -110,9 +120,13 @@ function PublishingSettingsPage() {
   const [inspectUrl, setInspectUrl] = useState("");
   const inspectMutation = useMutation({
     mutationFn: () =>
-      inspectPublishProduct({ data: { projectId, productUrl: inspectUrl.trim() } }),
+      inspectPublishProduct({
+        data: { projectId, productUrl: inspectUrl.trim() },
+      }),
     onError: (error) =>
-      toast.error(getStandardErrorMessage(error, "Could not inspect that product.")),
+      toast.error(
+        getStandardErrorMessage(error, "Could not inspect that product."),
+      ),
   });
 
   if (isPending || !data) {
@@ -123,6 +137,7 @@ function PublishingSettingsPage() {
   // its pages and posts.
   const connectionReady =
     Boolean(data.wordpressBaseUrl) &&
+    isHttpsPublishingUrl(data.wordpressBaseUrl ?? "") &&
     (data.wooCredentialStatus === "ok" || data.wpCredentialStatus === "ok");
 
   return (
@@ -136,11 +151,10 @@ function PublishingSettingsPage() {
         </p>
         <p className="mt-2 text-xs text-base-content/55">
           These credentials belong to this project alone. Each project stores
-          its own and never reads another&rsquo;s — the status beside each
-          field below is what is saved for <strong>this</strong> project. If a
-          field looks pre-filled but the status says &ldquo;Not set&rdquo;,
-          that is your browser autofilling, not a saved value; clear it before
-          saving.
+          its own and never reads another&rsquo;s — the status beside each field
+          below is what is saved for <strong>this</strong> project. If a field
+          looks pre-filled but the status says &ldquo;Not set&rdquo;, that is
+          your browser autofilling, not a saved value; clear it before saving.
         </p>
       </div>
 
@@ -160,6 +174,11 @@ function PublishingSettingsPage() {
               placeholder="https://wacomme.ae"
               className="input input-bordered mt-1 w-full"
             />
+            {baseUrl && !isHttpsPublishingUrl(baseUrl) ? (
+              <span className="mt-2 block text-xs text-error">
+                {HTTPS_PUBLISHING_URL_MESSAGE}
+              </span>
+            ) : null}
           </label>
         </div>
       </section>
@@ -204,9 +223,7 @@ function PublishingSettingsPage() {
 
       <section className="space-y-3 rounded-lg border border-base-300 p-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">
-            WordPress — pages and posts
-          </h3>
+          <h3 className="text-sm font-semibold">WordPress — pages and posts</h3>
           <StatusPill status={data.wpCredentialStatus} />
         </div>
         <p className="text-xs text-base-content/60">
@@ -388,7 +405,9 @@ function PublishingSettingsPage() {
               </div>
             </div>
           ) : (
-            <p className="text-sm text-warning">{inspectMutation.data.reason}</p>
+            <p className="text-sm text-warning">
+              {inspectMutation.data.reason}
+            </p>
           )
         ) : null}
       </section>
